@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="もくひょう">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>もくひょうスタンプ</title>
+<style>
+:root{
+  --bg:#fffdf7; --card:#ffffff; --ink:#3b3226; --sub:#8b7f6e;
+  --line:#ece2d2; --accent:#ff9f43; --accent2:#4ec3a5; --pink:#ff8fa3;
+  --shadow:0 4px 0 rgba(0,0,0,.06), 0 8px 20px rgba(0,0,0,.06);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"Hiragino Maru Gothic ProN","ヒラギノ丸ゴ ProN",system-ui,sans-serif;
+  font-size:18px; line-height:1.5;
+  padding-bottom:calc(96px + env(safe-area-inset-bottom));
+  -webkit-user-select:none; user-select:none;
+}
+header{
+  padding:calc(12px + env(safe-area-inset-top)) 16px 12px;
+  display:flex; align-items:center; gap:10px;
+}
+header h1{font-size:22px; margin:0; flex:1}
+.iconbtn{
+  border:none; background:#fff; border-radius:14px; padding:8px 12px;
+  font-size:20px; box-shadow:var(--shadow); cursor:pointer;
+}
+main{padding:0 16px}
+.view{display:none}
+.view.on{display:block}
+
+/* ---- きょう ---- */
+.datebar{
+  background:linear-gradient(135deg,#ffd9a0,#ffc4c9);
+  border-radius:20px; padding:14px 18px; margin-bottom:14px;
+  font-size:20px; font-weight:bold;
+}
+.datebar small{display:block; font-size:14px; font-weight:normal; opacity:.75}
+.goal{
+  width:100%; display:flex; align-items:center; gap:14px;
+  background:var(--card); border:3px solid var(--line); border-radius:22px;
+  padding:16px; margin-bottom:12px; box-shadow:var(--shadow);
+  font-family:inherit; font-size:21px; color:var(--ink); text-align:left; cursor:pointer;
+}
+.goal:active{transform:translateY(2px)}
+.goal .emo{font-size:38px; line-height:1}
+.goal .nm{flex:1; font-weight:bold}
+.goal .meta{font-size:14px; color:var(--sub); font-weight:normal; display:block}
+.goal.done{background:#f3fbf7; border-color:var(--accent2)}
+.goal .chk{font-size:30px}
+.empty{color:var(--sub); text-align:center; padding:40px 10px; line-height:1.9}
+.addbtn{
+  width:100%; padding:16px; border-radius:22px; border:3px dashed var(--line);
+  background:transparent; color:var(--sub); font-size:19px; font-family:inherit; cursor:pointer;
+}
+
+/* ---- カレンダー ---- */
+.calhead{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px}
+.calhead b{font-size:21px}
+.dow{display:grid; grid-template-columns:repeat(7,1fr); text-align:center; font-size:13px; color:var(--sub); margin-bottom:4px}
+.grid{display:grid; grid-template-columns:repeat(7,1fr); gap:5px}
+.cell{
+  aspect-ratio:1/1; background:var(--card); border:2px solid var(--line);
+  border-radius:14px; padding:3px; position:relative; overflow:hidden;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+}
+.cell.pad{background:transparent; border:none}
+.cell .d{position:absolute; top:2px; left:5px; font-size:11px; color:var(--sub)}
+.cell.today{border-color:var(--accent); border-width:3px}
+.cell .st{font-size:min(4.2vw,22px); line-height:1.05; word-break:break-all; text-align:center}
+.cell .more{font-size:10px; color:var(--sub)}
+
+/* ---- ごほうび ---- */
+.card{background:var(--card); border:3px solid var(--line); border-radius:22px; padding:18px; margin-bottom:14px; box-shadow:var(--shadow)}
+.bar{height:22px; background:#f0eade; border-radius:99px; overflow:hidden; margin:10px 0}
+.bar>i{display:block; height:100%; background:linear-gradient(90deg,var(--accent),var(--pink)); border-radius:99px; transition:width .4s}
+.big{font-size:26px; font-weight:bold}
+.pill{
+  border:none; border-radius:99px; padding:14px 22px; font-size:19px; font-family:inherit;
+  background:var(--accent); color:#fff; font-weight:bold; box-shadow:var(--shadow); cursor:pointer;
+}
+.pill.ghost{background:#fff; color:var(--sub); border:2px solid var(--line); box-shadow:none}
+.pill.warn{background:#ff6b6b}
+.pill:disabled{opacity:.4}
+
+/* ---- タブ ---- */
+nav{
+  position:fixed; left:0; right:0; bottom:0; display:flex;
+  background:#fff; border-top:2px solid var(--line);
+  padding:8px 0 calc(8px + env(safe-area-inset-bottom));
+}
+nav button{
+  flex:1; border:none; background:none; font-family:inherit; font-size:12px;
+  color:var(--sub); display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer;
+}
+nav button span{font-size:26px}
+nav button.on{color:var(--accent); font-weight:bold}
+
+/* ---- モーダル ---- */
+.mask{
+  position:fixed; inset:0; background:rgba(40,30,20,.45); display:none;
+  align-items:center; justify-content:center; padding:16px; z-index:50;
+}
+.mask.on{display:flex}
+.sheet{
+  background:#fff; border-radius:26px; padding:20px; width:100%; max-width:520px;
+  max-height:88vh; overflow:auto;
+}
+.sheet h2{margin:0 0 14px; font-size:21px}
+label{display:block; font-size:15px; color:var(--sub); margin:14px 0 6px}
+input[type=text],input[type=number],select{
+  width:100%; padding:14px; font-size:20px; font-family:inherit;
+  border:2px solid var(--line); border-radius:14px; background:#fffdf7; color:var(--ink);
+  -webkit-user-select:text; user-select:text;
+}
+.emopick{display:grid; grid-template-columns:repeat(6,1fr); gap:6px}
+.emopick button{
+  aspect-ratio:1/1; font-size:26px; border:2px solid var(--line); background:#fff;
+  border-radius:14px; cursor:pointer;
+}
+.emopick button.on{border-color:var(--accent); background:#fff6ea; border-width:3px}
+.row{display:flex; gap:10px; margin-top:18px}
+.row .pill{flex:1}
+.seg{display:flex; gap:8px}
+.seg button{
+  flex:1; padding:14px; border-radius:14px; border:2px solid var(--line); background:#fff;
+  font-family:inherit; font-size:17px; color:var(--ink); cursor:pointer;
+}
+.seg button.on{border-color:var(--accent); background:#fff6ea; border-width:3px; font-weight:bold}
+
+/* ---- タイマー ---- */
+#timerView{text-align:center; color:#fff}
+#timerView .sheet{background:linear-gradient(160deg,#5b7cfa,#8f6bfa); color:#fff; text-align:center}
+#timerClock{font-size:72px; font-weight:bold; letter-spacing:2px; margin:10px 0}
+#timerEmo{font-size:64px}
+.ring{width:180px;height:180px;margin:0 auto}
+.ring circle{fill:none; stroke-width:14; stroke-linecap:round}
+
+/* ---- お祝い ---- */
+#celeb .sheet{text-align:center; background:linear-gradient(160deg,#fff3d6,#ffe0e6)}
+#celeb .emo{font-size:80px; animation:pop .6s ease}
+@keyframes pop{0%{transform:scale(0)}70%{transform:scale(1.3)}100%{transform:scale(1)}}
+.confetti{position:fixed; inset:0; pointer-events:none; z-index:60; overflow:hidden}
+.confetti i{position:absolute; width:10px; height:16px; border-radius:3px; animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(720deg); opacity:.9}}
+
+.hint{font-size:14px; color:var(--sub); line-height:1.7}
+.listitem{display:flex; align-items:center; gap:10px; padding:12px 0; border-bottom:1px solid var(--line)}
+.listitem .emo{font-size:28px}
+.listitem .nm{flex:1}
+.mini{border:none; background:#f6f1e7; color:var(--sub); border-radius:10px; padding:8px 12px; font-family:inherit; font-size:14px; cursor:pointer}
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="title">きょうの もくひょう</h1>
+  <button class="iconbtn" id="btnAdult" aria-label="おとなのひと">⚙️</button>
+</header>
+
+<main>
+  <!-- ========== きょう ========== -->
+  <section class="view on" id="v-today">
+    <div class="datebar" id="dateBar"></div>
+    <div id="goalList"></div>
+    <button class="addbtn" id="btnAddGoal">＋ もくひょうを つくる</button>
+  </section>
+
+  <!-- ========== カレンダー ========== -->
+  <section class="view" id="v-cal">
+    <div class="calhead">
+      <button class="iconbtn" id="prevM">◀</button>
+      <b id="calLabel"></b>
+      <button class="iconbtn" id="nextM">▶</button>
+    </div>
+    <div class="dow"><div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div></div>
+    <div class="grid" id="calGrid"></div>
+    <p class="hint" id="calSum" style="text-align:center;margin-top:14px"></p>
+  </section>
+
+  <!-- ========== ごほうび ========== -->
+  <section class="view" id="v-reward">
+    <div class="card" id="rewardCard"></div>
+    <div class="card">
+      <b>これまでの ごほうび</b>
+      <div id="rewardHistory"></div>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button class="on" data-v="today"><span>⭐️</span>きょう</button>
+  <button data-v="cal"><span>📅</span>カレンダー</button>
+  <button data-v="reward"><span>🎁</span>ごほうび</button>
+</nav>
+
+<!-- ===== もくひょう作成 ===== -->
+<div class="mask" id="goalModal">
+  <div class="sheet">
+    <h2 id="goalModalTitle">もくひょうを つくる</h2>
+    <label>なまえ</label>
+    <input type="text" id="gName" placeholder="はみがき" maxlength="12">
+    <label>え を えらぶ</label>
+    <div class="emopick" id="emoPick"></div>
+    <label>やりかた</label>
+    <div class="seg">
+      <button data-t="tap" class="on">おしたら ポン</button>
+      <button data-t="timer">じかんを はかる</button>
+    </div>
+    <div id="minWrap" style="display:none">
+      <label>なんぷん？</label>
+      <input type="number" id="gMin" value="10" min="1" max="120">
+    </div>
+    <div class="row">
+      <button class="pill ghost" id="gCancel">やめる</button>
+      <button class="pill" id="gSave">できた！</button>
+    </div>
+    <div class="row" id="gDelRow" style="display:none">
+      <button class="pill warn" id="gDelete">この もくひょうを けす</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== タイマー ===== -->
+<div class="mask" id="timerView">
+  <div class="sheet">
+    <div id="timerEmo">⏳</div>
+    <div id="timerName" style="font-size:22px;font-weight:bold"></div>
+    <svg class="ring" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="43" stroke="rgba(255,255,255,.25)"></circle>
+      <circle cx="50" cy="50" r="43" stroke="#fff" id="ringFg"
+              stroke-dasharray="270.2" stroke-dashoffset="0" transform="rotate(-90 50 50)"></circle>
+    </svg>
+    <div id="timerClock">00:00</div>
+    <div class="row">
+      <button class="pill ghost" id="tQuit">やめる</button>
+      <button class="pill" id="tPause">とめる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== お祝い ===== -->
+<div class="mask" id="celeb">
+  <div class="sheet">
+    <div class="emo" id="celebEmo">🎉</div>
+    <div class="big" id="celebMsg"></div>
+    <div class="row"><button class="pill" id="celebOk">やったー！</button></div>
+  </div>
+</div>
+
+<!-- ===== おとなのひと ===== -->
+<div class="mask" id="adult">
+  <div class="sheet">
+    <h2>おとなのひと メニュー</h2>
+
+    <b>ごほうびの せってい</b>
+    <label>スタンプ 何個で ごほうび？</label>
+    <input type="number" id="rNeed" min="1" max="200">
+    <label>ごほうびの ないよう</label>
+    <input type="text" id="rText" placeholder="アイスを たべる" maxlength="30">
+    <div class="row"><button class="pill" id="rSave">ごほうびを ほぞん</button></div>
+
+    <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
+
+    <b>バックアップ</b>
+    <p class="hint">
+      iPad の中だけに記録しています。ホーム画面に追加して使ってください。<br>
+      それでも消えることがあるので、ときどき書き出して iCloud Drive に置いてください。
+    </p>
+    <div id="backupWarn" class="hint" style="color:#c0392b"></div>
+    <div class="row">
+      <button class="pill" id="btnExport">きろくを かきだす</button>
+    </div>
+    <div class="row">
+      <button class="pill ghost" id="btnImport">よみこむ（ふくげん）</button>
+    </div>
+    <input type="file" id="fileIn" accept="application/json" style="display:none">
+
+    <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
+    <b>もくひょうの かんり</b>
+    <div id="adultGoals"></div>
+
+    <div class="row"><button class="pill ghost" id="adultClose">とじる</button></div>
+  </div>
+</div>
+
+<script>
+/* ============ データ ============ */
+const KEY = 'soushi_stamp_v1';
+const EMOJIS = ['⭐️','🦖','🍰','⚽️','🚀','🐶','🐱','🌈','🍎','📚','🦁','🚗','🎨','🎵','🦋','🍩','🐧','🌟','🧸','🏊','🦕','🍓','🚲','😀'];
+
+const DEFAULT = {
+  goals: [],
+  stamps: {},                 // "2026-08-08": [{id, goalId, icon, name, ts}]
+  reward: { need: 10, text: '' },
+  history: [],                // [{text, need, at}]
+  spent: 0,                   // ごほうびに使ったスタンプ数
+  lastExport: null,
+  v: 1
+};
+
+let S = load();
+
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(!raw) return structuredClone(DEFAULT);
+    return Object.assign(structuredClone(DEFAULT), JSON.parse(raw));
+  }catch(e){
+    alert('きろくの よみこみに しっぱいしました: ' + e.message);
+    return structuredClone(DEFAULT);
+  }
+}
+function save(){
+  try{
+    localStorage.setItem(KEY, JSON.stringify(S));
+  }catch(e){
+    alert('ほぞんに しっぱいしました。おとなのひとに つたえてください。\n' + e.message);
+  }
+}
+
+/* ============ 日付 ============ */
+const pad = n => String(n).padStart(2,'0');
+const key = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const today = () => key(new Date());
+const WD = ['にちようび','げつようび','かようび','すいようび','もくようび','きんようび','どようび'];
+
+/* ============ 画面切替 ============ */
+const TITLES = {today:'きょうの もくひょう', cal:'スタンプ カレンダー', reward:'ごほうび'};
+document.querySelectorAll('nav button').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on', x===b));
+    const v = b.dataset.v;
+    document.querySelectorAll('.view').forEach(s=>s.classList.toggle('on', s.id==='v-'+v));
+    document.getElementById('title').textContent = TITLES[v];
+    if(v==='cal') renderCal();
+    if(v==='reward') renderReward();
+  };
+});
+
+/* ============ きょう ============ */
+function todayStamps(){ return S.stamps[today()] || []; }
+
+function renderToday(){
+  const d = new Date();
+  document.getElementById('dateBar').innerHTML =
+    `${d.getMonth()+1}がつ ${d.getDate()}にち<small>${WD[d.getDay()]}</small>`;
+
+  const list = document.getElementById('goalList');
+  list.innerHTML = '';
+  if(S.goals.length === 0){
+    list.innerHTML = '<div class="empty">まだ もくひょうが ありません。<br>したの ボタンで つくってみよう！</div>';
+    return;
+  }
+  const done = new Set(todayStamps().map(s=>s.goalId));
+  S.goals.forEach(g=>{
+    const b = document.createElement('button');
+    b.className = 'goal' + (done.has(g.id) ? ' done' : '');
+    b.innerHTML = `<span class="emo">${g.icon}</span>
+      <span class="nm">${esc(g.name)}
+        <span class="meta">${g.type==='timer' ? g.min+'ぷん はかる' : 'おしたら ポン'}</span></span>
+      <span class="chk">${done.has(g.id) ? '✅' : '⬜️'}</span>`;
+    b.onclick = ()=> tapGoal(g);
+    list.appendChild(b);
+  });
+}
+
+function tapGoal(g){
+  const done = todayStamps().some(s=>s.goalId===g.id);
+  if(done){
+    if(confirm(`「${g.name}」の スタンプを けしますか？`)){
+      S.stamps[today()] = todayStamps().filter(s=>s.goalId!==g.id);
+      if(S.stamps[today()].length===0) delete S.stamps[today()];
+      save(); renderToday();
+    }
+    return;
+  }
+  if(g.type==='timer') startTimer(g);
+  else stamp(g);
+}
+
+function stamp(g){
+  const k = today();
+  (S.stamps[k] = S.stamps[k] || []).push({
+    id: 'st'+Date.now(), goalId: g.id, icon: g.icon, name: g.name, ts: Date.now()
+  });
+  save();
+  renderToday();
+  confetti();
+  const total = totalStamps() - S.spent;
+  const need = S.reward.need;
+  if(S.reward.text && need>0 && total>0 && total % need === 0){
+    showCeleb('🎁', `スタンプ ${need}こ たまった！\n${S.reward.text}`);
+  }else{
+    showCeleb(g.icon, 'スタンプ ゲット！');
+  }
+}
+
+function totalStamps(){
+  return Object.values(S.stamps).reduce((a,v)=>a+v.length, 0);
+}
+
+/* ============ タイマー ============ */
+let T = null;
+function startTimer(g){
+  const total = g.min * 60;
+  // 画面が消えている間もカウントが進むよう、残り時間は「終わる時刻」から毎回計算する
+  let endAt = Date.now() + total * 1000;
+  let left = total, paused = false;
+  document.getElementById('timerEmo').textContent = g.icon;
+  document.getElementById('timerName').textContent = g.name;
+  document.getElementById('timerView').classList.add('on');
+  const ring = document.getElementById('ringFg'), C = 270.2;
+
+  const draw = ()=>{
+    document.getElementById('timerClock').textContent =
+      `${pad(Math.floor(left/60))}:${pad(left%60)}`;
+    ring.style.strokeDashoffset = C * (1 - left/total);
+  };
+  draw();
+
+  T = setInterval(()=>{
+    if(paused) return;
+    left = Math.max(0, Math.round((endAt - Date.now())/1000));
+    draw();
+    if(left<=0){
+      stopTimer();
+      stamp(g);
+    }
+  }, 250);
+
+  document.getElementById('tPause').onclick = e=>{
+    paused = !paused;
+    if(!paused) endAt = Date.now() + left * 1000;   // 再開したぶんだけ終わる時刻をずらす
+    e.target.textContent = paused ? 'つづける' : 'とめる';
+  };
+  document.getElementById('tQuit').onclick = ()=>{
+    if(confirm('やめますか？ スタンプは もらえません。')) stopTimer();
+  };
+}
+function stopTimer(){
+  clearInterval(T); T = null;
+  document.getElementById('timerView').classList.remove('on');
+  document.getElementById('tPause').textContent = 'とめる';
+}
+
+/* ============ カレンダー ============ */
+let calM = new Date();
+function renderCal(){
+  const y = calM.getFullYear(), m = calM.getMonth();
+  document.getElementById('calLabel').textContent = `${y}ねん ${m+1}がつ`;
+  const first = new Date(y,m,1), lastD = new Date(y,m+1,0).getDate();
+  const g = document.getElementById('calGrid');
+  g.innerHTML = '';
+  for(let i=0;i<first.getDay();i++){
+    const c = document.createElement('div'); c.className='cell pad'; g.appendChild(c);
+  }
+  let cnt = 0;
+  for(let d=1; d<=lastD; d++){
+    const k = `${y}-${pad(m+1)}-${pad(d)}`;
+    const st = S.stamps[k] || [];
+    cnt += st.length;
+    const c = document.createElement('div');
+    c.className = 'cell' + (k===today() ? ' today' : '');
+    const show = st.slice(0,4).map(s=>s.icon).join('');
+    c.innerHTML = `<span class="d">${d}</span>
+      <span class="st">${show}</span>
+      ${st.length>4 ? `<span class="more">+${st.length-4}</span>` : ''}`;
+    if(st.length) c.onclick = ()=> alert(`${m+1}がつ${d}にち\n\n` + st.map(s=>s.icon+' '+s.name).join('\n'));
+    g.appendChild(c);
+  }
+  document.getElementById('calSum').textContent = `この つきの スタンプ： ${cnt}こ`;
+}
+document.getElementById('prevM').onclick = ()=>{ calM.setMonth(calM.getMonth()-1); renderCal(); };
+document.getElementById('nextM').onclick = ()=>{ calM.setMonth(calM.getMonth()+1); renderCal(); };
+
+/* ============ ごほうび ============ */
+function renderReward(){
+  const el = document.getElementById('rewardCard');
+  const need = S.reward.need, have = totalStamps() - S.spent;
+  if(!S.reward.text){
+    el.innerHTML = `<div class="empty">ごほうびが まだ きまっていません。<br>
+      みぎうえの ⚙️ から おとなのひとに きめてもらおう。</div>`;
+  }else{
+    const pct = Math.min(100, Math.round(have/need*100));
+    const ok = have >= need;
+    el.innerHTML = `
+      <div class="hint">いまの ごほうび</div>
+      <div class="big">🎁 ${esc(S.reward.text)}</div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <div style="font-size:20px">スタンプ <b>${have}</b> / ${need} こ</div>
+      <div class="row">
+        <button class="pill" id="claim" ${ok?'':'disabled'}>
+          ${ok ? 'ごほうびを もらった！' : `あと ${need-have} こ`}
+        </button>
+      </div>`;
+    if(ok) document.getElementById('claim').onclick = claim;
+  }
+  const h = document.getElementById('rewardHistory');
+  h.innerHTML = S.history.length
+    ? S.history.slice().reverse().map(x=>
+        `<div class="listitem"><span class="emo">🎁</span>
+         <span class="nm">${esc(x.text)}<span class="meta" style="display:block;font-size:13px;color:var(--sub)">${x.at}</span></span></div>`).join('')
+    : '<div class="hint">まだ ありません</div>';
+}
+function claim(){
+  if(!confirm(`「${S.reward.text}」を もらいましたか？\nスタンプ ${S.reward.need}こを つかいます。`)) return;
+  S.spent += S.reward.need;
+  S.history.push({ text: S.reward.text, need: S.reward.need, at: today() });
+  save();
+  confetti(); showCeleb('🎁', 'おめでとう！');
+  renderReward();
+}
+
+/* ============ もくひょう作成 ============ */
+let editing = null, pickEmo = EMOJIS[0], pickType = 'tap';
+function openGoalModal(g){
+  editing = g || null;
+  document.getElementById('goalModalTitle').textContent = g ? 'もくひょうを なおす' : 'もくひょうを つくる';
+  document.getElementById('gName').value = g ? g.name : '';
+  document.getElementById('gMin').value = g && g.min ? g.min : 10;
+  pickEmo = g ? g.icon : EMOJIS[0];
+  pickType = g ? g.type : 'tap';
+  const p = document.getElementById('emoPick');
+  p.innerHTML = '';
+  EMOJIS.forEach(e=>{
+    const b = document.createElement('button');
+    b.textContent = e;
+    b.className = e===pickEmo ? 'on' : '';
+    b.onclick = ()=>{ pickEmo = e; [...p.children].forEach(c=>c.classList.toggle('on', c===b)); };
+    p.appendChild(b);
+  });
+  document.querySelectorAll('.seg button').forEach(b=>{
+    b.classList.toggle('on', b.dataset.t===pickType);
+    b.onclick = ()=>{
+      pickType = b.dataset.t;
+      document.querySelectorAll('.seg button').forEach(x=>x.classList.toggle('on', x===b));
+      document.getElementById('minWrap').style.display = pickType==='timer' ? 'block' : 'none';
+    };
+  });
+  document.getElementById('minWrap').style.display = pickType==='timer' ? 'block' : 'none';
+  document.getElementById('gDelRow').style.display = g ? 'flex' : 'none';
+  document.getElementById('goalModal').classList.add('on');
+}
+document.getElementById('btnAddGoal').onclick = ()=> openGoalModal(null);
+document.getElementById('gCancel').onclick = ()=> document.getElementById('goalModal').classList.remove('on');
+document.getElementById('gSave').onclick = ()=>{
+  const name = document.getElementById('gName').value.trim();
+  if(!name){ alert('なまえを いれてね'); return; }
+  const min = Math.max(1, Math.min(120, parseInt(document.getElementById('gMin').value,10) || 10));
+  if(editing){
+    Object.assign(editing, { name, icon: pickEmo, type: pickType, min });
+  }else{
+    S.goals.push({ id:'g'+Date.now(), name, icon: pickEmo, type: pickType, min });
+  }
+  save();
+  document.getElementById('goalModal').classList.remove('on');
+  renderToday(); renderAdultGoals();
+};
+document.getElementById('gDelete').onclick = ()=>{
+  if(!editing) return;
+  if(!confirm(`「${editing.name}」を けしますか？`)) return;
+  if(!confirm('ほんとうに けしますか？\n（おしたスタンプは のこります）')) return;
+  S.goals = S.goals.filter(x=>x.id!==editing.id);
+  save();
+  document.getElementById('goalModal').classList.remove('on');
+  renderToday(); renderAdultGoals();
+};
+
+/* ============ おとなメニュー ============ */
+document.getElementById('btnAdult').onclick = ()=>{
+  document.getElementById('rNeed').value = S.reward.need;
+  document.getElementById('rText').value = S.reward.text;
+  renderAdultGoals();
+  renderBackupWarn();
+  document.getElementById('adult').classList.add('on');
+};
+document.getElementById('adultClose').onclick = ()=> document.getElementById('adult').classList.remove('on');
+document.getElementById('rSave').onclick = ()=>{
+  const n = parseInt(document.getElementById('rNeed').value,10);
+  if(!n || n<1){ alert('スタンプの数を入れてください'); return; }
+  S.reward = { need:n, text: document.getElementById('rText').value.trim() };
+  save(); renderReward();
+  alert('ほぞんしました');
+};
+function renderAdultGoals(){
+  const el = document.getElementById('adultGoals');
+  el.innerHTML = S.goals.length ? '' : '<div class="hint">まだありません</div>';
+  S.goals.forEach(g=>{
+    const d = document.createElement('div');
+    d.className = 'listitem';
+    d.innerHTML = `<span class="emo">${g.icon}</span><span class="nm">${esc(g.name)}</span>`;
+    const b = document.createElement('button');
+    b.className='mini'; b.textContent='なおす';
+    b.onclick = ()=>{ document.getElementById('adult').classList.remove('on'); openGoalModal(g); };
+    d.appendChild(b);
+    el.appendChild(d);
+  });
+}
+function renderBackupWarn(){
+  const el = document.getElementById('backupWarn');
+  if(!S.lastExport){ el.textContent = '⚠️ まだ一度も書き出していません。'; return; }
+  const days = Math.floor((Date.now() - S.lastExport) / 86400000);
+  el.textContent = days >= 30
+    ? `⚠️ 最後の書き出しから ${days} 日たっています。書き出しをおすすめします。`
+    : `最後の書き出し： ${days} 日前`;
+}
+
+/* ---- 書き出し / 読み込み ---- */
+document.getElementById('btnExport').onclick = ()=>{
+  S.lastExport = Date.now(); save();
+  const blob = new Blob([JSON.stringify(S, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `もくひょうスタンプ_${today()}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+  renderBackupWarn();
+};
+document.getElementById('btnImport').onclick = ()=> document.getElementById('fileIn').click();
+document.getElementById('fileIn').onchange = async e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  try{
+    const data = JSON.parse(await f.text());
+    if(!data || typeof data !== 'object' || !('stamps' in data) || !('goals' in data)){
+      throw new Error('このファイルは このアプリの きろくではないようです');
+    }
+    const cnt = Object.values(data.stamps).reduce((a,v)=>a+v.length,0);
+    if(!confirm(`いまの記録を すべて置きかえます。\n\n読み込む記録： もくひょう ${data.goals.length}個 / スタンプ ${cnt}個\n\nよろしいですか？`)) return;
+    S = Object.assign(structuredClone(DEFAULT), data);
+    save();
+    renderToday(); renderCal(); renderReward(); renderAdultGoals();
+    alert('ふくげんしました');
+  }catch(err){
+    alert('よみこみに しっぱいしました:\n' + err.message);
+  }finally{
+    e.target.value = '';
+  }
+};
+
+/* ============ 演出 ============ */
+function showCeleb(emo, msg){
+  document.getElementById('celebEmo').textContent = emo;
+  document.getElementById('celebMsg').textContent = msg;
+  document.getElementById('celeb').classList.add('on');
+}
+document.getElementById('celebOk').onclick = ()=> document.getElementById('celeb').classList.remove('on');
+
+function confetti(){
+  const wrap = document.createElement('div');
+  wrap.className = 'confetti';
+  const cols = ['#ff9f43','#4ec3a5','#ff8fa3','#5b7cfa','#ffd93d'];
+  for(let i=0;i<40;i++){
+    const p = document.createElement('i');
+    p.style.left = Math.random()*100 + '%';
+    p.style.top = '-20px';
+    p.style.background = cols[i%cols.length];
+    p.style.animationDuration = (1.4 + Math.random()*1.2) + 's';
+    p.style.animationDelay = (Math.random()*0.4) + 's';
+    wrap.appendChild(p);
+  }
+  document.body.appendChild(wrap);
+  setTimeout(()=>wrap.remove(), 3200);
+}
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ============ 起動 ============ */
+renderToday();
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+// iOS でストレージが消えかけていないか、起動時にゆるく確認
+if(navigator.storage && navigator.storage.persist){
+  navigator.storage.persisted().then(p=>{ if(!p) navigator.storage.persist().catch(()=>{}); });
+}
+</script>
+</body>
+</html>
