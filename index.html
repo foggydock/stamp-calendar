@@ -75,8 +75,7 @@ main{padding:0 16px}
 .cell.pad{background:transparent; border:none}
 .cell .d{position:absolute; top:2px; left:5px; font-size:11px; color:var(--sub)}
 .cell.today{border-color:var(--accent); border-width:3px}
-.cell .st{font-size:min(4.2vw,22px); line-height:1.05; word-break:break-all; text-align:center}
-.cell .more{font-size:10px; color:var(--sub)}
+.cell .st{line-height:1.05; word-break:break-all; text-align:center; display:flex; flex-wrap:wrap; align-items:center; justify-content:center}
 
 /* ---- ごほうび ---- */
 .card{background:var(--card); border:3px solid var(--line); border-radius:22px; padding:18px; margin-bottom:14px; box-shadow:var(--shadow)}
@@ -470,10 +469,10 @@ function renderCal(){
     cnt += st.length;
     const c = document.createElement('div');
     c.className = 'cell' + (k===today() ? ' today' : '');
-    const show = st.slice(0,4).map(s=>s.icon).join('');
+    const show = st.map(s=>s.icon).join('');
+    const fs = st.length<=4 ? 22 : Math.max(9, Math.floor(22/Math.ceil(Math.sqrt(st.length/4))));
     c.innerHTML = `<span class="d">${d}</span>
-      <span class="st">${show}</span>
-      ${st.length>4 ? `<span class="more">+${st.length-4}</span>` : ''}`;
+      <span class="st" style="font-size:min(${fs/22*4.2}vw,${fs}px)">${show}</span>`;
     if(st.length) c.onclick = ()=> alert(`${m+1}がつ${d}にち\n\n` + st.map(s=>s.icon+' '+s.name).join('\n'));
     g.appendChild(c);
   }
