@@ -170,6 +170,7 @@ input[type=text],input[type=number],select{
   <section class="view on" id="v-today">
     <div class="datebar" id="dateBar"></div>
     <div id="goalList"></div>
+    <button class="addbtn" id="btnSelectGoal" style="border-style:solid; margin-bottom:10px">✅ きょうの もくひょうを えらぶ</button>
     <button class="addbtn" id="btnAddGoal">＋ もくひょうを つくる</button>
   </section>
 
@@ -187,6 +188,7 @@ input[type=text],input[type=number],select{
 
   <!-- ========== ごほうび ========== -->
   <section class="view" id="v-reward">
+    <div class="card" id="dailyRewardCard"></div>
     <div class="card" id="rewardCard"></div>
     <div class="card">
       <b>これまでの ごほうび</b>
@@ -225,6 +227,16 @@ input[type=text],input[type=number],select{
     <div class="row" id="gDelRow" style="display:none">
       <button class="pill warn" id="gDelete">この もくひょうを けす</button>
     </div>
+  </div>
+</div>
+
+<!-- ===== きょうの もくひょうを えらぶ ===== -->
+<div class="mask" id="goalSelectModal">
+  <div class="sheet">
+    <h2>きょうの もくひょうを えらぶ</h2>
+    <p class="hint">チェックした もくひょうが「きょう」に でます。<br>チェックを はずしても もくひょうは きえません。あとで また えらべます。</p>
+    <div id="goalSelectList"></div>
+    <div class="row"><button class="pill" id="goalSelectClose">とじる</button></div>
   </div>
 </div>
 
@@ -269,6 +281,13 @@ input[type=text],input[type=number],select{
 
     <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
 
+    <b>きょう ぜんぶ できたら の ごほうび</b>
+    <label>メッセージ（きょうの もくひょうを ぜんぶ やった日に出ます）</label>
+    <input type="text" id="dText" placeholder="こうえんに いく" maxlength="30">
+    <div class="row"><button class="pill" id="dSave">ほぞん</button></div>
+
+    <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
+
     <b>バックアップ</b>
     <p class="hint">
       iPad の中だけに記録しています。ホーム画面に追加して使ってください。<br>
@@ -300,6 +319,7 @@ const DEFAULT = {
   goals: [],
   stamps: {},                 // "2026-08-08": [{id, goalId, icon, name, ts}]
   reward: { need: 10, text: '' },
+  dailyReward: { text: '' },  // きょうの もくひょうを ぜんぶ やったら出す ごほうび
   history: [],                // [{text, need, at}]
   spent: 0,                   // ごほうびに使ったスタンプ数
   lastExport: null,
@@ -347,6 +367,13 @@ document.querySelectorAll('nav button').forEach(b=>{
 
 /* ============ きょう ============ */
 function todayStamps(){ return S.stamps[today()] || []; }
+function activeGoals(){ return S.goals.filter(g=>g.active!==false); }
+function allDoneToday(){
+  const ag = activeGoals();
+  if(ag.length===0) return false;
+  const done = new Set(todayStamps().map(s=>s.goalId));
+  return ag.every(g=>done.has(g.id));
+}
 
 function renderToday(){
   const d = new Date();
@@ -359,8 +386,13 @@ function renderToday(){
     list.innerHTML = '<div class="empty">まだ もくひょうが ありません。<br>したの ボタンで つくってみよう！</div>';
     return;
   }
+  const ag = activeGoals();
+  if(ag.length === 0){
+    list.innerHTML = '<div class="empty">きょうの もくひょうが えらばれていません。<br>したの「えらぶ」ボタンから えらんでね。</div>';
+    return;
+  }
   const done = new Set(todayStamps().map(s=>s.goalId));
-  S.goals.forEach(g=>{
+  ag.forEach(g=>{
     const b = document.createElement('button');
     b.className = 'goal' + (done.has(g.id) ? ' done' : '');
     b.innerHTML = `<span class="emo">${g.icon}</span>
@@ -371,6 +403,27 @@ function renderToday(){
     list.appendChild(b);
   });
 }
+
+/* ---- きょうの もくひょうを えらぶ ---- */
+function renderGoalSelect(){
+  const el = document.getElementById('goalSelectList');
+  el.innerHTML = S.goals.length ? '' : '<div class="hint">もくひょうが まだ ありません</div>';
+  S.goals.forEach(g=>{
+    const active = g.active !== false;
+    const b = document.createElement('button');
+    b.className = 'goal' + (active ? ' done' : '');
+    b.innerHTML = `<span class="emo">${g.icon}</span>
+      <span class="nm">${esc(g.name)}</span>
+      <span class="chk">${active ? '✅' : '⬜️'}</span>`;
+    b.onclick = ()=>{ g.active = !active; save(); renderGoalSelect(); renderToday(); };
+    el.appendChild(b);
+  });
+}
+document.getElementById('btnSelectGoal').onclick = ()=>{
+  renderGoalSelect();
+  document.getElementById('goalSelectModal').classList.add('on');
+};
+document.getElementById('goalSelectClose').onclick = ()=> document.getElementById('goalSelectModal').classList.remove('on');
 
 function tapGoal(g){
   const done = todayStamps().some(s=>s.goalId===g.id);
@@ -388,15 +441,19 @@ function tapGoal(g){
 
 function stamp(g){
   const k = today();
+  const wasAllDone = allDoneToday();
   (S.stamps[k] = S.stamps[k] || []).push({
     id: 'st'+Date.now(), goalId: g.id, icon: g.icon, name: g.name, ts: Date.now()
   });
   save();
   renderToday();
   confetti();
+  const justCompletedAll = !wasAllDone && allDoneToday();
   const total = totalStamps() - S.spent;
   const need = S.reward.need;
-  if(S.reward.text && need>0 && total>0 && total % need === 0){
+  if(justCompletedAll && S.dailyReward && S.dailyReward.text){
+    showCeleb('🏆', `きょうの もくひょう ぜんぶ できた！\n${S.dailyReward.text}`);
+  }else if(S.reward.text && need>0 && total>0 && total % need === 0){
     showCeleb('🎁', `スタンプ ${need}こ たまった！\n${S.reward.text}`);
   }else{
     showCeleb(g.icon, 'スタンプ ゲット！');
@@ -483,6 +540,23 @@ document.getElementById('nextM').onclick = ()=>{ calM.setMonth(calM.getMonth()+1
 
 /* ============ ごほうび ============ */
 function renderReward(){
+  const dEl = document.getElementById('dailyRewardCard');
+  if(S.dailyReward && S.dailyReward.text){
+    const ag = activeGoals();
+    const done = new Set(todayStamps().map(s=>s.goalId));
+    const doneCount = ag.filter(g=>done.has(g.id)).length;
+    const all = ag.length>0 && doneCount===ag.length;
+    dEl.innerHTML = `
+      <div class="hint">きょう ぜんぶ できたら</div>
+      <div class="big">🏆 ${esc(S.dailyReward.text)}</div>
+      <div style="font-size:18px;margin-top:6px">
+        ${ag.length ? `もくひょう ${doneCount} / ${ag.length}` : 'きょうの もくひょうが えらばれていません'}
+      </div>
+      ${all ? '<div style="margin-top:8px;color:var(--accent2);font-weight:bold">✅ きょう たっせい！</div>' : ''}`;
+  }else{
+    dEl.innerHTML = '';
+  }
+
   const el = document.getElementById('rewardCard');
   const need = S.reward.need, have = totalStamps() - S.spent;
   if(!S.reward.text){
@@ -558,7 +632,7 @@ document.getElementById('gSave').onclick = ()=>{
   if(editing){
     Object.assign(editing, { name, icon: pickEmo, type: pickType, min });
   }else{
-    S.goals.push({ id:'g'+Date.now(), name, icon: pickEmo, type: pickType, min });
+    S.goals.push({ id:'g'+Date.now(), name, icon: pickEmo, type: pickType, min, active: true });
   }
   save();
   document.getElementById('goalModal').classList.remove('on');
@@ -578,6 +652,7 @@ document.getElementById('gDelete').onclick = ()=>{
 document.getElementById('btnAdult').onclick = ()=>{
   document.getElementById('rNeed').value = S.reward.need;
   document.getElementById('rText').value = S.reward.text;
+  document.getElementById('dText').value = S.dailyReward ? S.dailyReward.text : '';
   renderAdultGoals();
   renderBackupWarn();
   document.getElementById('adult').classList.add('on');
@@ -587,6 +662,11 @@ document.getElementById('rSave').onclick = ()=>{
   const n = parseInt(document.getElementById('rNeed').value,10);
   if(!n || n<1){ alert('スタンプの数を入れてください'); return; }
   S.reward = { need:n, text: document.getElementById('rText').value.trim() };
+  save(); renderReward();
+  alert('ほぞんしました');
+};
+document.getElementById('dSave').onclick = ()=>{
+  S.dailyReward = { text: document.getElementById('dText').value.trim() };
   save(); renderReward();
   alert('ほぞんしました');
 };
