@@ -248,6 +248,21 @@ input[type=text],input[type=number],select{
     <div id="pinErr" class="hint" style="color:#c0392b;min-height:20px"></div>
     <div class="emopick" id="pinPad" style="grid-template-columns:repeat(3,1fr)"></div>
     <div class="row"><button class="pill ghost" id="pinCancel">やめる</button></div>
+    <button class="mini" id="pinForgot" style="margin-top:14px">あんしょうばんごうを わすれた</button>
+  </div>
+</div>
+
+<!-- ===== あんしょうばんごう さいせってい ===== -->
+<div class="mask" id="pinResetModal">
+  <div class="sheet">
+    <h2>あんしょうばんごうの さいせってい</h2>
+    <label>ひみつの ことば</label>
+    <input type="text" id="pinRecoveryInput" placeholder="ひみつの ことばを にゅうりょく">
+    <p class="hint" id="pinResetErr" style="color:#c0392b"></p>
+    <div class="row">
+      <button class="pill ghost" id="pinResetCancel">やめる</button>
+      <button class="pill" id="pinResetOk">つぎへ</button>
+    </div>
   </div>
 </div>
 
@@ -287,6 +302,8 @@ input[type=text],input[type=number],select{
     <p class="hint">「きょうのもくひょうをえらぶ」と この おとなメニューを ひらくときに ひつようです。</p>
     <label>4けたの すうじ</label>
     <input type="text" id="pinNew" inputmode="numeric" maxlength="4" placeholder="れい：1234">
+    <label>ひみつの ことば（わすれたときの さいせってい用）</label>
+    <input type="text" id="pinHintNew" placeholder="れい：そうしのたんじょうび" maxlength="30">
     <div class="row"><button class="pill" id="pinSave">あんしょうばんごうを ほぞん</button></div>
 
     <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
@@ -344,6 +361,7 @@ const DEFAULT = {
   spent: 0,                   // ごほうびに使ったスタンプ数
   lastExport: null,
   pin: null,                  // おとなのひとの あんしょうばんごう（4けた）
+  pinHint: null,               // PINをわすれたときの さいせってい用「ひみつのことば」
   v: 1
 };
 
@@ -697,6 +715,7 @@ document.getElementById('gDelete').onclick = ()=>{
 document.getElementById('btnAdult').onclick = ()=>{
   requirePin(()=>{
     document.getElementById('pinNew').value = '';
+    document.getElementById('pinHintNew').value = '';
     document.getElementById('rNeed').value = S.reward.need;
     document.getElementById('rText').value = S.reward.text;
     document.getElementById('dText').value = S.dailyReward ? S.dailyReward.text : '';
@@ -707,9 +726,12 @@ document.getElementById('btnAdult').onclick = ()=>{
 };
 document.getElementById('pinSave').onclick = ()=>{
   const v = document.getElementById('pinNew').value.trim();
+  const hint = document.getElementById('pinHintNew').value.trim();
   if(!/^\d{4}$/.test(v)){ alert('4けたの すうじで にゅうりょくしてください'); return; }
-  S.pin = v; save();
+  if(!hint){ alert('わすれたときのために「ひみつのことば」も いれてください'); return; }
+  S.pin = v; S.pinHint = hint; save();
   document.getElementById('pinNew').value = '';
+  document.getElementById('pinHintNew').value = '';
   alert('あんしょうばんごうを ほぞんしました');
 };
 
@@ -759,6 +781,35 @@ function requirePin(onOk){
   document.getElementById('pinErr').textContent = '';
   document.getElementById('pinModal').classList.add('on');
 }
+
+/* ---- PINを わすれたときの さいせってい ---- */
+document.getElementById('pinForgot').onclick = ()=>{
+  if(!S.pinHint){
+    alert('ひみつのことばが とうろくされていません。バックアップから ふくげんするか、記録を消して やりなおしてください。');
+    return;
+  }
+  document.getElementById('pinModal').classList.remove('on');
+  document.getElementById('pinRecoveryInput').value = '';
+  document.getElementById('pinResetErr').textContent = '';
+  document.getElementById('pinResetModal').classList.add('on');
+};
+document.getElementById('pinResetCancel').onclick = ()=>{
+  document.getElementById('pinResetModal').classList.remove('on');
+};
+document.getElementById('pinResetOk').onclick = ()=>{
+  const v = document.getElementById('pinRecoveryInput').value.trim();
+  if(v !== S.pinHint){
+    document.getElementById('pinResetErr').textContent = 'ちがいます。もういちど。';
+    return;
+  }
+  document.getElementById('pinResetModal').classList.remove('on');
+  const newPin = prompt('あたらしい 4けたの あんしょうばんごうを にゅうりょくしてください');
+  if(!newPin || !/^\d{4}$/.test(newPin.trim())){ alert('4けたの すうじで にゅうりょくしてください。もういちど「わすれた」から やりなおしてください。'); return; }
+  S.pin = newPin.trim(); save();
+  alert('あんしょうばんごうを さいせっていしました');
+  const ok = pinOnOk; pinOnOk = null;
+  if(ok) ok();
+};
 document.getElementById('adultClose').onclick = ()=> document.getElementById('adult').classList.remove('on');
 document.getElementById('rSave').onclick = ()=>{
   const n = parseInt(document.getElementById('rNeed').value,10);
