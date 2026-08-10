@@ -354,16 +354,30 @@ const WD = ['にちようび','げつようび','かようび','すいようび'
 
 /* ============ 画面切替 ============ */
 const TITLES = {today:'きょうの もくひょう', cal:'スタンプ カレンダー', reward:'ごほうび'};
+let curView = 'today';
 document.querySelectorAll('nav button').forEach(b=>{
   b.onclick = ()=>{
     document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on', x===b));
-    const v = b.dataset.v;
+    const v = curView = b.dataset.v;
     document.querySelectorAll('.view').forEach(s=>s.classList.toggle('on', s.id==='v-'+v));
     document.getElementById('title').textContent = TITLES[v];
     if(v==='cal') renderCal();
     if(v==='reward') renderReward();
   };
 });
+
+/* 日をまたいでアプリを開きっぱなしにしても「きょう」が古いままにならないようにする */
+let lastKnownDate = today();
+function checkDateChange(){
+  const t = today();
+  if(t === lastKnownDate) return;
+  lastKnownDate = t;
+  renderToday();
+  if(curView === 'cal'){ calM = new Date(); renderCal(); }
+  if(curView === 'reward') renderReward();
+}
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkDateChange(); });
+setInterval(checkDateChange, 60000);
 
 /* ============ きょう ============ */
 function todayStamps(){ return S.stamps[today()] || []; }
