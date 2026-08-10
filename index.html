@@ -470,7 +470,7 @@ function renderCal(){
     const c = document.createElement('div');
     c.className = 'cell' + (k===today() ? ' today' : '');
     const show = st.map(s=>s.icon).join('');
-    const fs = st.length<=4 ? 22 : Math.max(9, Math.floor(22/Math.ceil(Math.sqrt(st.length/4))));
+    const fs = st.length<=4 ? 27 : Math.max(9, Math.floor(27/Math.ceil(Math.sqrt(st.length/4))));
     c.innerHTML = `<span class="d">${d}</span>
       <span class="st" style="font-size:min(${fs/22*4.2}vw,${fs}px)">${show}</span>`;
     if(st.length) c.onclick = ()=> alert(`${m+1}がつ${d}にち\n\n` + st.map(s=>s.icon+' '+s.name).join('\n'));
