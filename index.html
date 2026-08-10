@@ -240,6 +240,17 @@ input[type=text],input[type=number],select{
   </div>
 </div>
 
+<!-- ===== あんしょうばんごう ===== -->
+<div class="mask" id="pinModal">
+  <div class="sheet" style="text-align:center">
+    <h2>おとなのひとの あんしょうばんごう</h2>
+    <div id="pinDots" style="font-size:32px;letter-spacing:14px;margin:14px 0;min-height:40px">・ ・ ・ ・</div>
+    <div id="pinErr" class="hint" style="color:#c0392b;min-height:20px"></div>
+    <div class="emopick" id="pinPad" style="grid-template-columns:repeat(3,1fr)"></div>
+    <div class="row"><button class="pill ghost" id="pinCancel">やめる</button></div>
+  </div>
+</div>
+
 <!-- ===== タイマー ===== -->
 <div class="mask" id="timerView">
   <div class="sheet">
@@ -271,6 +282,14 @@ input[type=text],input[type=number],select{
 <div class="mask" id="adult">
   <div class="sheet">
     <h2>おとなのひと メニュー</h2>
+
+    <b>あんしょうばんごう</b>
+    <p class="hint">「きょうのもくひょうをえらぶ」と この おとなメニューを ひらくときに ひつようです。</p>
+    <label>4けたの すうじ</label>
+    <input type="text" id="pinNew" inputmode="numeric" maxlength="4" placeholder="れい：1234">
+    <div class="row"><button class="pill" id="pinSave">あんしょうばんごうを ほぞん</button></div>
+
+    <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
 
     <b>ごほうびの せってい</b>
     <label>スタンプ 何個で ごほうび？</label>
@@ -318,11 +337,13 @@ const EMOJIS = ['⭐️','🦖','🍰','⚽️','🚀','🐶','🐱','🌈','�
 const DEFAULT = {
   goals: [],
   stamps: {},                 // "2026-08-08": [{id, goalId, icon, name, ts}]
+  dailySelections: {},        // "2026-08-08": [goalId, ...]  ← その日「きょう」に出すもくひょう。日が変わると自動で空になる
   reward: { need: 10, text: '' },
   dailyReward: { text: '' },  // きょうの もくひょうを ぜんぶ やったら出す ごほうび
   history: [],                // [{text, need, at}]
   spent: 0,                   // ごほうびに使ったスタンプ数
   lastExport: null,
+  pin: null,                  // おとなのひとの あんしょうばんごう（4けた）
   v: 1
 };
 
@@ -381,7 +402,8 @@ setInterval(checkDateChange, 60000);
 
 /* ============ きょう ============ */
 function todayStamps(){ return S.stamps[today()] || []; }
-function activeGoals(){ return S.goals.filter(g=>g.active!==false); }
+function todaySelectedIds(){ return new Set(S.dailySelections[today()] || []); }
+function activeGoals(){ const sel = todaySelectedIds(); return S.goals.filter(g=>sel.has(g.id)); }
 function allDoneToday(){
   const ag = activeGoals();
   if(ag.length===0) return false;
@@ -422,20 +444,29 @@ function renderToday(){
 function renderGoalSelect(){
   const el = document.getElementById('goalSelectList');
   el.innerHTML = S.goals.length ? '' : '<div class="hint">もくひょうが まだ ありません</div>';
+  const sel = todaySelectedIds();
   S.goals.forEach(g=>{
-    const active = g.active !== false;
+    const active = sel.has(g.id);
     const b = document.createElement('button');
     b.className = 'goal' + (active ? ' done' : '');
     b.innerHTML = `<span class="emo">${g.icon}</span>
       <span class="nm">${esc(g.name)}</span>
       <span class="chk">${active ? '✅' : '⬜️'}</span>`;
-    b.onclick = ()=>{ g.active = !active; save(); renderGoalSelect(); renderToday(); };
+    b.onclick = ()=>{
+      const k = today();
+      const cur = new Set(S.dailySelections[k] || []);
+      if(cur.has(g.id)) cur.delete(g.id); else cur.add(g.id);
+      S.dailySelections[k] = [...cur];
+      save(); renderGoalSelect(); renderToday();
+    };
     el.appendChild(b);
   });
 }
 document.getElementById('btnSelectGoal').onclick = ()=>{
-  renderGoalSelect();
-  document.getElementById('goalSelectModal').classList.add('on');
+  requirePin(()=>{
+    renderGoalSelect();
+    document.getElementById('goalSelectModal').classList.add('on');
+  });
 };
 document.getElementById('goalSelectClose').onclick = ()=> document.getElementById('goalSelectModal').classList.remove('on');
 
@@ -664,13 +695,70 @@ document.getElementById('gDelete').onclick = ()=>{
 
 /* ============ おとなメニュー ============ */
 document.getElementById('btnAdult').onclick = ()=>{
-  document.getElementById('rNeed').value = S.reward.need;
-  document.getElementById('rText').value = S.reward.text;
-  document.getElementById('dText').value = S.dailyReward ? S.dailyReward.text : '';
-  renderAdultGoals();
-  renderBackupWarn();
-  document.getElementById('adult').classList.add('on');
+  requirePin(()=>{
+    document.getElementById('pinNew').value = '';
+    document.getElementById('rNeed').value = S.reward.need;
+    document.getElementById('rText').value = S.reward.text;
+    document.getElementById('dText').value = S.dailyReward ? S.dailyReward.text : '';
+    renderAdultGoals();
+    renderBackupWarn();
+    document.getElementById('adult').classList.add('on');
+  });
 };
+document.getElementById('pinSave').onclick = ()=>{
+  const v = document.getElementById('pinNew').value.trim();
+  if(!/^\d{4}$/.test(v)){ alert('4けたの すうじで にゅうりょくしてください'); return; }
+  S.pin = v; save();
+  document.getElementById('pinNew').value = '';
+  alert('あんしょうばんごうを ほぞんしました');
+};
+
+/* ---- あんしょうばんごう ロック ---- */
+let pinInput = '', pinOnOk = null;
+function renderPinDots(){
+  document.getElementById('pinDots').textContent = [0,1,2,3].map(i=> i<pinInput.length ? '●' : '・').join(' ');
+}
+(function buildPinPad(){
+  const pad = document.getElementById('pinPad');
+  ['1','2','3','4','5','6','7','8','9','','0','⌫'].forEach(k=>{
+    const b = document.createElement('button');
+    b.textContent = k;
+    if(k===''){ b.style.visibility='hidden'; }
+    else{
+      b.onclick = ()=>{
+        document.getElementById('pinErr').textContent = '';
+        if(k==='⌫'){ pinInput = pinInput.slice(0,-1); renderPinDots(); return; }
+        if(pinInput.length>=4) return;
+        pinInput += k;
+        renderPinDots();
+        if(pinInput.length===4){
+          if(pinInput === S.pin){
+            const ok = pinOnOk;
+            closePinModal();
+            if(ok) ok();
+          }else{
+            document.getElementById('pinErr').textContent = 'ちがいます。もういちど。';
+            pinInput = ''; renderPinDots();
+          }
+        }
+      };
+    }
+    pad.appendChild(b);
+  });
+})();
+function closePinModal(){
+  document.getElementById('pinModal').classList.remove('on');
+  pinInput = ''; pinOnOk = null; renderPinDots();
+  document.getElementById('pinErr').textContent = '';
+}
+document.getElementById('pinCancel').onclick = closePinModal;
+function requirePin(onOk){
+  if(!S.pin){ onOk(); return; }
+  pinOnOk = onOk;
+  pinInput = ''; renderPinDots();
+  document.getElementById('pinErr').textContent = '';
+  document.getElementById('pinModal').classList.add('on');
+}
 document.getElementById('adultClose').onclick = ()=> document.getElementById('adult').classList.remove('on');
 document.getElementById('rSave').onclick = ()=>{
   const n = parseInt(document.getElementById('rNeed').value,10);
