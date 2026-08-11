@@ -230,13 +230,23 @@ input[type=text],input[type=number],select{
   </div>
 </div>
 
-<!-- ===== きょうの もくひょうを えらぶ ===== -->
+<!-- ===== もくひょうを えらぶ ===== -->
 <div class="mask" id="goalSelectModal">
   <div class="sheet">
-    <h2>きょうの もくひょうを えらぶ</h2>
-    <p class="hint">チェックした もくひょうが「きょう」に でます。<br>チェックを はずしても もくひょうは きえません。あとで また えらべます。</p>
+    <h2 id="goalSelectTitle">きょうの もくひょうを えらぶ</h2>
+    <p class="hint">チェックした もくひょうが その日に でます。<br>チェックを はずしても もくひょうは きえません。あとで また えらべます。</p>
     <div id="goalSelectList"></div>
     <div class="row"><button class="pill" id="goalSelectClose">とじる</button></div>
+  </div>
+</div>
+
+<!-- ===== その日の きろく（おとな用） ===== -->
+<div class="mask" id="dayModal">
+  <div class="sheet">
+    <h2 id="dayModalTitle"></h2>
+    <div id="dayGoalList"></div>
+    <button class="addbtn" id="dayBtnSelect" style="border-style:solid; margin-bottom:10px">✅ この日の もくひょうを えらぶ</button>
+    <div class="row"><button class="pill ghost" id="dayModalClose">とじる</button></div>
   </div>
 </div>
 
@@ -390,6 +400,10 @@ const pad = n => String(n).padStart(2,'0');
 const key = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const today = () => key(new Date());
 const WD = ['にちようび','げつようび','かようび','すいようび','もくようび','きんようび','どようび'];
+function dateLabel(k){
+  const [y,m,d] = k.split('-').map(Number);
+  return `${m}がつ${d}にち`;
+}
 
 /* ============ 画面切替 ============ */
 const TITLES = {today:'きょうの もくひょう', cal:'スタンプ カレンダー', reward:'ごほうび'};
@@ -459,10 +473,14 @@ function renderToday(){
 }
 
 /* ---- きょうの もくひょうを えらぶ ---- */
-function renderGoalSelect(){
+let selectDateKey = today();
+function renderGoalSelect(dateKey){
+  selectDateKey = dateKey || today();
+  document.getElementById('goalSelectTitle').textContent =
+    selectDateKey === today() ? 'きょうの もくひょうを えらぶ' : dateLabel(selectDateKey) + 'の もくひょうを えらぶ';
   const el = document.getElementById('goalSelectList');
   el.innerHTML = S.goals.length ? '' : '<div class="hint">もくひょうが まだ ありません</div>';
-  const sel = todaySelectedIds();
+  const sel = new Set(S.dailySelections[selectDateKey] || []);
   S.goals.forEach(g=>{
     const active = sel.has(g.id);
     const b = document.createElement('button');
@@ -471,22 +489,26 @@ function renderGoalSelect(){
       <span class="nm">${esc(g.name)}</span>
       <span class="chk">${active ? '✅' : '⬜️'}</span>`;
     b.onclick = ()=>{
-      const k = today();
-      const cur = new Set(S.dailySelections[k] || []);
+      const cur = new Set(S.dailySelections[selectDateKey] || []);
       if(cur.has(g.id)) cur.delete(g.id); else cur.add(g.id);
-      S.dailySelections[k] = [...cur];
-      save(); renderGoalSelect(); renderToday();
+      S.dailySelections[selectDateKey] = [...cur];
+      save(); renderGoalSelect(selectDateKey);
+      if(selectDateKey === today()) renderToday();
     };
     el.appendChild(b);
   });
 }
 document.getElementById('btnSelectGoal').onclick = ()=>{
   requirePin(()=>{
-    renderGoalSelect();
+    renderGoalSelect(today());
     document.getElementById('goalSelectModal').classList.add('on');
   });
 };
-document.getElementById('goalSelectClose').onclick = ()=> document.getElementById('goalSelectModal').classList.remove('on');
+document.getElementById('goalSelectClose').onclick = ()=>{
+  document.getElementById('goalSelectModal').classList.remove('on');
+  renderToday();
+  if(document.getElementById('dayModal').classList.contains('on')) renderDayDetail();
+};
 
 function tapGoal(g){
   const done = todayStamps().some(s=>s.goalId===g.id);
@@ -593,13 +615,68 @@ function renderCal(){
     const fs = st.length<=4 ? 27 : Math.max(9, Math.floor(27/Math.ceil(Math.sqrt(st.length/4))));
     c.innerHTML = `<span class="d">${d}</span>
       <span class="st" style="font-size:min(${fs/22*4.2}vw,${fs}px)">${show}</span>`;
-    if(st.length) c.onclick = ()=> alert(`${m+1}がつ${d}にち\n\n` + st.map(s=>s.icon+' '+s.name).join('\n'));
+    c.onclick = ()=> openDayDetail(k);
     g.appendChild(c);
   }
   document.getElementById('calSum').textContent = `この つきの スタンプ： ${cnt}こ`;
 }
 document.getElementById('prevM').onclick = ()=>{ calM.setMonth(calM.getMonth()-1); renderCal(); };
 document.getElementById('nextM').onclick = ()=>{ calM.setMonth(calM.getMonth()+1); renderCal(); };
+
+/* ---- その日の きろく（カレンダーの日付タップ、常にPIN） ---- */
+let dayDetailKey = null;
+function openDayDetail(k){
+  requirePin(()=>{
+    dayDetailKey = k;
+    renderDayDetail();
+    document.getElementById('dayModal').classList.add('on');
+  });
+}
+function renderDayDetail(){
+  const k = dayDetailKey;
+  const dt = new Date();
+  const [y,m,d] = k.split('-').map(Number);
+  document.getElementById('dayModalTitle').textContent =
+    `${dateLabel(k)}（${WD[new Date(y,m-1,d).getDay()]}）`;
+  const list = document.getElementById('dayGoalList');
+  list.innerHTML = '';
+  const selIds = new Set(S.dailySelections[k] || []);
+  const goals = S.goals.filter(g=>selIds.has(g.id));
+  if(goals.length === 0){
+    list.innerHTML = '<div class="empty">この日は もくひょうが えらばれていません。</div>';
+    return;
+  }
+  const stampedIds = new Set((S.stamps[k]||[]).map(s=>s.goalId));
+  goals.forEach(g=>{
+    const done = stampedIds.has(g.id);
+    const b = document.createElement('button');
+    b.className = 'goal' + (done ? ' done' : '');
+    b.innerHTML = `<span class="emo">${g.icon}</span>
+      <span class="nm">${esc(g.name)}</span>
+      <span class="chk">${done ? '✅' : '⬜️'}</span>`;
+    b.onclick = ()=>{
+      const arr = S.stamps[k] || [];
+      if(done){
+        S.stamps[k] = arr.filter(s=>s.goalId!==g.id);
+        if(S.stamps[k].length===0) delete S.stamps[k];
+      }else{
+        (S.stamps[k] = S.stamps[k] || []).push({
+          id:'st'+Date.now()+Math.random(), goalId:g.id, icon:g.icon, name:g.name, ts:Date.now()
+        });
+      }
+      save();
+      renderDayDetail();
+      renderCal();
+      if(k===today()) renderToday();
+    };
+    list.appendChild(b);
+  });
+}
+document.getElementById('dayBtnSelect').onclick = ()=>{
+  renderGoalSelect(dayDetailKey);
+  document.getElementById('goalSelectModal').classList.add('on');
+};
+document.getElementById('dayModalClose').onclick = ()=> document.getElementById('dayModal').classList.remove('on');
 
 /* ============ ごほうび ============ */
 function renderReward(){
