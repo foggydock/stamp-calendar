@@ -56,6 +56,14 @@ main{padding:0 16px}
 .goal .meta{font-size:14px; color:var(--sub); font-weight:normal; display:block}
 .goal.done{background:#f3fbf7; border-color:var(--accent2)}
 .goal .chk{font-size:30px}
+.goalwrap{margin-bottom:12px}
+.goalwrap .goal{margin-bottom:6px}
+.deferbtn{
+  display:block; margin-left:auto; background:#fff7e8; border:2px solid #f0d9a8;
+  color:#b8860b; border-radius:12px; padding:6px 12px; font-size:14px;
+  font-family:inherit; cursor:pointer;
+}
+.deferbtn.on{background:#ffedc2; border-color:#e0ac2b; font-weight:bold}
 .empty{color:var(--sub); text-align:center; padding:40px 10px; line-height:1.9}
 .addbtn{
   width:100%; padding:16px; border-radius:22px; border:3px dashed var(--line);
@@ -169,6 +177,7 @@ input[type=text],input[type=number],select{
   <!-- ========== きょう ========== -->
   <section class="view on" id="v-today">
     <div class="datebar" id="dateBar"></div>
+    <div id="pendingReview"></div>
     <div id="goalList"></div>
     <button class="addbtn" id="btnSelectGoal" style="border-style:solid; margin-bottom:10px">✅ きょうの もくひょうを えらぶ</button>
     <button class="addbtn" id="btnAddGoal">＋ もくひょうを つくる</button>
@@ -250,28 +259,17 @@ input[type=text],input[type=number],select{
   </div>
 </div>
 
-<!-- ===== あんしょうばんごう ===== -->
+<!-- ===== おとなのひと ロック（わりざん） ===== -->
 <div class="mask" id="pinModal">
   <div class="sheet" style="text-align:center">
-    <h2>おとなのひとの あんしょうばんごう</h2>
-    <div id="pinDots" style="font-size:32px;letter-spacing:14px;margin:14px 0;min-height:40px">・ ・ ・ ・</div>
+    <h2>おとなのひと の もんだい</h2>
+    <p class="hint">このわりざんが とけたら すすめます</p>
+    <div id="gateProblem" style="font-size:34px;font-weight:bold;margin:18px 0"></div>
+    <input type="tel" inputmode="numeric" id="gateInput" placeholder="こたえ" style="text-align:center;font-size:26px">
     <div id="pinErr" class="hint" style="color:#c0392b;min-height:20px"></div>
-    <div class="emopick" id="pinPad" style="grid-template-columns:repeat(3,1fr)"></div>
-    <div class="row"><button class="pill ghost" id="pinCancel">やめる</button></div>
-    <button class="mini" id="pinForgot" style="margin-top:14px">あんしょうばんごうを わすれた</button>
-  </div>
-</div>
-
-<!-- ===== あんしょうばんごう さいせってい ===== -->
-<div class="mask" id="pinResetModal">
-  <div class="sheet">
-    <h2>あんしょうばんごうの さいせってい</h2>
-    <label>ひみつの ことば</label>
-    <input type="text" id="pinRecoveryInput" placeholder="ひみつの ことばを にゅうりょく">
-    <p class="hint" id="pinResetErr" style="color:#c0392b"></p>
     <div class="row">
-      <button class="pill ghost" id="pinResetCancel">やめる</button>
-      <button class="pill" id="pinResetOk">つぎへ</button>
+      <button class="pill ghost" id="pinCancel">やめる</button>
+      <button class="pill" id="gateOk">こたえる</button>
     </div>
   </div>
 </div>
@@ -308,13 +306,8 @@ input[type=text],input[type=number],select{
   <div class="sheet">
     <h2>おとなのひと メニュー</h2>
 
-    <b>あんしょうばんごう</b>
-    <p class="hint">「きょうのもくひょうをえらぶ」と この おとなメニューを ひらくときに ひつようです。</p>
-    <label>4けたの すうじ</label>
-    <input type="text" id="pinNew" inputmode="numeric" maxlength="4" placeholder="れい：1234">
-    <label>ひみつの ことば（わすれたときの さいせってい用）</label>
-    <input type="text" id="pinHintNew" placeholder="れい：そうしのたんじょうび" maxlength="30">
-    <div class="row"><button class="pill" id="pinSave">あんしょうばんごうを ほぞん</button></div>
+    <b>ロックについて</b>
+    <p class="hint">「きょうのもくひょうをえらぶ」と この おとなメニューを ひらくときは、わりざんの もんだいが出ます。</p>
 
     <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
 
@@ -365,13 +358,12 @@ const DEFAULT = {
   goals: [],
   stamps: {},                 // "2026-08-08": [{id, goalId, icon, name, ts}]
   dailySelections: {},        // "2026-08-08": [goalId, ...]  ← その日「きょう」に出すもくひょう。日が変わると自動で空になる
+  deferred: {},                // "2026-08-08": [goalId, ...]  ← その日は「あした きめる」にした もくひょう。あした PINなしで けっていできる
   reward: { need: 10, text: '' },
   dailyReward: { text: '' },  // きょうの もくひょうを ぜんぶ やったら出す ごほうび
   history: [],                // [{text, need, at}]
   spent: 0,                   // ごほうびに使ったスタンプ数
   lastExport: null,
-  pin: null,                  // おとなのひとの あんしょうばんごう（4けた）
-  pinHint: null,               // PINをわすれたときの さいせってい用「ひみつのことば」
   v: 1
 };
 
@@ -448,6 +440,8 @@ function renderToday(){
   document.getElementById('dateBar').innerHTML =
     `${d.getMonth()+1}がつ ${d.getDate()}にち<small>${WD[d.getDay()]}</small>`;
 
+  renderPendingReview();
+
   const list = document.getElementById('goalList');
   list.innerHTML = '';
   if(S.goals.length === 0){
@@ -460,16 +454,90 @@ function renderToday(){
     return;
   }
   const done = new Set(todayStamps().map(s=>s.goalId));
+  const deferredToday = new Set(S.deferred[today()] || []);
   ag.forEach(g=>{
+    const isDone = done.has(g.id);
+    const wrap = document.createElement('div');
+    wrap.className = 'goalwrap';
     const b = document.createElement('button');
-    b.className = 'goal' + (done.has(g.id) ? ' done' : '');
+    b.className = 'goal' + (isDone ? ' done' : '');
     b.innerHTML = `<span class="emo">${g.icon}</span>
       <span class="nm">${esc(g.name)}
         <span class="meta">${g.type==='timer' ? g.min+'ぷん はかる' : 'おしたら ポン'}</span></span>
-      <span class="chk">${done.has(g.id) ? '✅' : '⬜️'}</span>`;
+      <span class="chk">${isDone ? '✅' : (deferredToday.has(g.id) ? '⏳' : '⬜️')}</span>`;
     b.onclick = ()=> tapGoal(g);
-    list.appendChild(b);
+    wrap.appendChild(b);
+    if(!isDone){
+      const isDeferred = deferredToday.has(g.id);
+      const d = document.createElement('button');
+      d.className = 'deferbtn' + (isDeferred ? ' on' : '');
+      d.textContent = isDeferred ? '⏳ あした きめる（ON）' : '⏳ あした きめる';
+      d.onclick = ()=> toggleDefer(g.id);
+      wrap.appendChild(d);
+    }
+    list.appendChild(wrap);
   });
+}
+
+/* ---- あした きめる（PINなしで つぎの日に けっていできる） ---- */
+function toggleDefer(goalId){
+  const k = today();
+  const arr = S.deferred[k] || [];
+  const idx = arr.indexOf(goalId);
+  if(idx>=0) arr.splice(idx,1); else arr.push(goalId);
+  if(arr.length) S.deferred[k] = arr; else delete S.deferred[k];
+  save(); renderToday();
+}
+function pendingReviews(){
+  const t = today();
+  const out = [];
+  Object.keys(S.deferred).sort().forEach(k=>{
+    if(k >= t) return;
+    const stamped = new Set((S.stamps[k]||[]).map(s=>s.goalId));
+    (S.deferred[k]||[]).forEach(gid=>{
+      if(stamped.has(gid)) return;
+      const g = S.goals.find(x=>x.id===gid);
+      if(g) out.push({date:k, goal:g});
+    });
+  });
+  return out;
+}
+function resolvePending(dateKey, goal, didIt){
+  const arr = (S.deferred[dateKey]||[]).filter(id=>id!==goal.id);
+  if(arr.length) S.deferred[dateKey] = arr; else delete S.deferred[dateKey];
+  if(didIt){
+    (S.stamps[dateKey] = S.stamps[dateKey] || []).push({
+      id:'st'+Date.now()+Math.random(), goalId:goal.id, icon:goal.icon, name:goal.name, ts:Date.now()
+    });
+  }
+  save(); renderToday(); renderCal();
+}
+function renderPendingReview(){
+  const el = document.getElementById('pendingReview');
+  const items = pendingReviews();
+  el.innerHTML = '';
+  if(items.length === 0) return;
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.style.background = '#fff7e8'; card.style.borderColor = '#f0d9a8';
+  card.innerHTML = '<b>⏳ まえの日の けってい まち</b>';
+  items.forEach(it=>{
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;margin-top:12px';
+    row.innerHTML = `<span style="font-size:28px">${it.goal.icon}</span>
+      <span style="flex:1"><b>${esc(it.goal.name)}</b><br><span class="hint">${dateLabel(it.date)}</span></span>`;
+    const okBtn = document.createElement('button');
+    okBtn.className = 'mini'; okBtn.textContent = 'できた ✅';
+    okBtn.onclick = ()=> resolvePending(it.date, it.goal, true);
+    const ngBtn = document.createElement('button');
+    ngBtn.className = 'mini'; ngBtn.textContent = 'できなかった';
+    ngBtn.onclick = ()=>{
+      if(confirm(`「${it.goal.name}」（${dateLabel(it.date)}）は できなかった、で よいですか？`)) resolvePending(it.date, it.goal, false);
+    };
+    row.appendChild(okBtn); row.appendChild(ngBtn);
+    card.appendChild(row);
+  });
+  el.appendChild(card);
 }
 
 /* ---- きょうの もくひょうを えらぶ ---- */
@@ -791,8 +859,6 @@ document.getElementById('gDelete').onclick = ()=>{
 /* ============ おとなメニュー ============ */
 document.getElementById('btnAdult').onclick = ()=>{
   requirePin(()=>{
-    document.getElementById('pinNew').value = '';
-    document.getElementById('pinHintNew').value = '';
     document.getElementById('rNeed').value = S.reward.need;
     document.getElementById('rText').value = S.reward.text;
     document.getElementById('dText').value = S.dailyReward ? S.dailyReward.text : '';
@@ -801,92 +867,45 @@ document.getElementById('btnAdult').onclick = ()=>{
     document.getElementById('adult').classList.add('on');
   });
 };
-document.getElementById('pinSave').onclick = ()=>{
-  const v = document.getElementById('pinNew').value.trim();
-  const hint = document.getElementById('pinHintNew').value.trim();
-  if(!/^\d{4}$/.test(v)){ alert('4けたの すうじで にゅうりょくしてください'); return; }
-  if(!hint){ alert('わすれたときのために「ひみつのことば」も いれてください'); return; }
-  S.pin = v; S.pinHint = hint; save();
-  document.getElementById('pinNew').value = '';
-  document.getElementById('pinHintNew').value = '';
-  alert('あんしょうばんごうを ほぞんしました');
-};
 
-/* ---- あんしょうばんごう ロック ---- */
-let pinInput = '', pinOnOk = null;
-function renderPinDots(){
-  document.getElementById('pinDots').textContent = [0,1,2,3].map(i=> i<pinInput.length ? '●' : '・').join(' ');
+/* ---- おとなのひと ロック（わりざんの もんだい） ---- */
+let gateOnOk = null, gateAnswer = 0;
+function genGateProblem(){
+  const divisor = 2 + Math.floor(Math.random()*8);   // 2〜9
+  const quotient = 2 + Math.floor(Math.random()*11); // 2〜12
+  gateAnswer = quotient;
+  document.getElementById('gateProblem').textContent = `${divisor*quotient} ÷ ${divisor} = ？`;
+  document.getElementById('gateInput').value = '';
 }
-(function buildPinPad(){
-  const pad = document.getElementById('pinPad');
-  ['1','2','3','4','5','6','7','8','9','','0','⌫'].forEach(k=>{
-    const b = document.createElement('button');
-    b.textContent = k;
-    if(k===''){ b.style.visibility='hidden'; }
-    else{
-      b.onclick = ()=>{
-        document.getElementById('pinErr').textContent = '';
-        if(k==='⌫'){ pinInput = pinInput.slice(0,-1); renderPinDots(); return; }
-        if(pinInput.length>=4) return;
-        pinInput += k;
-        renderPinDots();
-        if(pinInput.length===4){
-          if(pinInput === S.pin){
-            const ok = pinOnOk;
-            closePinModal();
-            if(ok) ok();
-          }else{
-            document.getElementById('pinErr').textContent = 'ちがいます。もういちど。';
-            pinInput = ''; renderPinDots();
-          }
-        }
-      };
-    }
-    pad.appendChild(b);
-  });
-})();
 function closePinModal(){
   document.getElementById('pinModal').classList.remove('on');
-  pinInput = ''; pinOnOk = null; renderPinDots();
+  gateOnOk = null;
   document.getElementById('pinErr').textContent = '';
 }
 document.getElementById('pinCancel').onclick = closePinModal;
+document.getElementById('gateOk').onclick = ()=>{
+  const v = document.getElementById('gateInput').value.trim();
+  if(Number(v) === gateAnswer){
+    const ok = gateOnOk;
+    closePinModal();
+    if(ok) ok();
+  }else{
+    document.getElementById('pinErr').textContent = 'ちがいます。もういちど。';
+    genGateProblem();
+    document.getElementById('gateInput').focus();
+  }
+};
+document.getElementById('gateInput').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') document.getElementById('gateOk').click();
+});
 function requirePin(onOk){
-  if(!S.pin){ onOk(); return; }
-  pinOnOk = onOk;
-  pinInput = ''; renderPinDots();
+  gateOnOk = onOk;
+  genGateProblem();
   document.getElementById('pinErr').textContent = '';
   document.getElementById('pinModal').classList.add('on');
+  document.getElementById('gateInput').focus();
 }
 
-/* ---- PINを わすれたときの さいせってい ---- */
-document.getElementById('pinForgot').onclick = ()=>{
-  if(!S.pinHint){
-    alert('ひみつのことばが とうろくされていません。バックアップから ふくげんするか、記録を消して やりなおしてください。');
-    return;
-  }
-  document.getElementById('pinModal').classList.remove('on');
-  document.getElementById('pinRecoveryInput').value = '';
-  document.getElementById('pinResetErr').textContent = '';
-  document.getElementById('pinResetModal').classList.add('on');
-};
-document.getElementById('pinResetCancel').onclick = ()=>{
-  document.getElementById('pinResetModal').classList.remove('on');
-};
-document.getElementById('pinResetOk').onclick = ()=>{
-  const v = document.getElementById('pinRecoveryInput').value.trim();
-  if(v !== S.pinHint){
-    document.getElementById('pinResetErr').textContent = 'ちがいます。もういちど。';
-    return;
-  }
-  document.getElementById('pinResetModal').classList.remove('on');
-  const newPin = prompt('あたらしい 4けたの あんしょうばんごうを にゅうりょくしてください');
-  if(!newPin || !/^\d{4}$/.test(newPin.trim())){ alert('4けたの すうじで にゅうりょくしてください。もういちど「わすれた」から やりなおしてください。'); return; }
-  S.pin = newPin.trim(); save();
-  alert('あんしょうばんごうを さいせっていしました');
-  const ok = pinOnOk; pinOnOk = null;
-  if(ok) ok();
-};
 document.getElementById('adultClose').onclick = ()=> document.getElementById('adult').classList.remove('on');
 document.getElementById('rSave').onclick = ()=>{
   const n = parseInt(document.getElementById('rNeed').value,10);
