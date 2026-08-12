@@ -177,6 +177,7 @@ input[type=text],input[type=number],select{
   <!-- ========== きょう ========== -->
   <section class="view on" id="v-today">
     <div class="datebar" id="dateBar"></div>
+    <div id="backupBanner"></div>
     <div id="pendingReview"></div>
     <div id="goalList"></div>
     <button class="addbtn" id="btnSelectGoal" style="border-style:solid; margin-bottom:10px">✅ きょうの もくひょうを えらぶ</button>
@@ -336,6 +337,10 @@ input[type=text],input[type=number],select{
     <div class="row">
       <button class="pill" id="btnExport">きろくを かきだす</button>
     </div>
+    <p class="hint" style="margin-top:16px">
+      さらに、アプリの中に自動で「もどせる時点」を残しています（うっかり読み込みで上書きした時などに使えます。iPadが壊れた場合は守れないので、上の書き出しも忘れずに）。
+    </p>
+    <div id="snapshotList"></div>
     <div class="row">
       <button class="pill ghost" id="btnImport">よみこむ（ふくげん）</button>
     </div>
@@ -417,6 +422,7 @@ function checkDateChange(){
   const t = today();
   if(t === lastKnownDate) return;
   lastKnownDate = t;
+  takeDailySnapshotIfNeeded();
   renderToday();
   if(curView === 'cal'){ calM = new Date(); renderCal(); }
   if(curView === 'reward') renderReward();
@@ -441,6 +447,7 @@ function renderToday(){
     `${d.getMonth()+1}がつ ${d.getDate()}にち<small>${WD[d.getDay()]}</small>`;
 
   renderPendingReview();
+  renderBackupBanner();
 
   const list = document.getElementById('goalList');
   list.innerHTML = '';
@@ -864,6 +871,7 @@ document.getElementById('btnAdult').onclick = ()=>{
     document.getElementById('dText').value = S.dailyReward ? S.dailyReward.text : '';
     renderAdultGoals();
     renderBackupWarn();
+    renderSnapshotList();
     document.getElementById('adult').classList.add('on');
   });
 };
@@ -942,8 +950,76 @@ function renderBackupWarn(){
     : `最後の書き出し： ${days} 日前`;
 }
 
+/* ---- きょう画面に出す バックアップうながしバナー ---- */
+const EXPORT_REMIND_DAYS = 14;
+function renderBackupBanner(){
+  const el = document.getElementById('backupBanner');
+  if(!el) return;
+  const days = S.lastExport ? Math.floor((Date.now() - S.lastExport) / 86400000) : Infinity;
+  if(days < EXPORT_REMIND_DAYS){ el.innerHTML = ''; return; }
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.style.background = '#fff0f0'; card.style.borderColor = '#f0b8b8';
+  card.innerHTML = S.lastExport
+    ? `<b>⚠️ ${days}日 バックアップしていません</b><p class="hint" style="margin:6px 0 12px">iPadが こわれると きろくが きえます。いますぐ書き出しましょう。</p>`
+    : `<b>⚠️ まだ一度も バックアップしていません</b><p class="hint" style="margin:6px 0 12px">iPadが こわれると きろくが きえます。いますぐ書き出しましょう。</p>`;
+  const btn = document.createElement('button');
+  btn.className = 'pill'; btn.textContent = '📤 いますぐ書き出す';
+  btn.onclick = exportBackup;
+  card.appendChild(btn);
+  el.innerHTML = '';
+  el.appendChild(card);
+}
+
+/* ---- じどうスナップショット（アプリ内の「もどせる時点」。端末が壊れた場合は守れない） ---- */
+const SNAP_KEY = 'soushi_stamp_v1_snapshots';
+function loadSnapshots(){
+  try{ return JSON.parse(localStorage.getItem(SNAP_KEY)) || []; }
+  catch(e){ return []; }
+}
+function saveSnapshots(arr){
+  try{ localStorage.setItem(SNAP_KEY, JSON.stringify(arr)); }catch(e){ /* 容量不足などは無視してよい */ }
+}
+function takeSnapshot(label){
+  const snaps = loadSnapshots();
+  snaps.push({ at: Date.now(), label, data: structuredClone(S) });
+  while(snaps.length > 14) snaps.shift();
+  saveSnapshots(snaps);
+}
+function takeDailySnapshotIfNeeded(){
+  const snaps = loadSnapshots();
+  const last = snaps[snaps.length-1];
+  if(last && last.label === 'まいにち' && key(new Date(last.at)) === today()) return;
+  takeSnapshot('まいにち');
+}
+function renderSnapshotList(){
+  const el = document.getElementById('snapshotList');
+  const snaps = loadSnapshots().slice().reverse();
+  if(snaps.length === 0){ el.innerHTML = '<div class="hint">まだ ありません</div>'; return; }
+  el.innerHTML = '';
+  snaps.forEach(sn=>{
+    const cnt = Object.values(sn.data.stamps||{}).reduce((a,v)=>a+v.length,0);
+    const d = document.createElement('div');
+    d.className = 'listitem';
+    const dt = new Date(sn.at);
+    d.innerHTML = `<span class="nm">${dt.getMonth()+1}/${dt.getDate()} ${sn.label}<br><span class="hint">もくひょう${sn.data.goals.length}個 / スタンプ${cnt}個</span></span>`;
+    const b = document.createElement('button');
+    b.className='mini'; b.textContent='この時点にもどす';
+    b.onclick = ()=>{
+      if(!confirm(`いまの記録を「${dt.getMonth()+1}/${dt.getDate()} ${sn.label}」の時点に置きかえます。よろしいですか？`)) return;
+      takeSnapshot('もどす前');
+      S = Object.assign(structuredClone(DEFAULT), structuredClone(sn.data));
+      save();
+      renderToday(); renderCal(); renderReward(); renderAdultGoals(); renderSnapshotList();
+      alert('もどしました');
+    };
+    d.appendChild(b);
+    el.appendChild(d);
+  });
+}
+
 /* ---- 書き出し / 読み込み ---- */
-document.getElementById('btnExport').onclick = ()=>{
+function exportBackup(){
   S.lastExport = Date.now(); save();
   const blob = new Blob([JSON.stringify(S, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
@@ -952,7 +1028,9 @@ document.getElementById('btnExport').onclick = ()=>{
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
   renderBackupWarn();
-};
+  renderBackupBanner();
+}
+document.getElementById('btnExport').onclick = exportBackup;
 document.getElementById('btnImport').onclick = ()=> document.getElementById('fileIn').click();
 document.getElementById('fileIn').onchange = async e=>{
   const f = e.target.files[0];
@@ -964,6 +1042,7 @@ document.getElementById('fileIn').onchange = async e=>{
     }
     const cnt = Object.values(data.stamps).reduce((a,v)=>a+v.length,0);
     if(!confirm(`いまの記録を すべて置きかえます。\n\n読み込む記録： もくひょう ${data.goals.length}個 / スタンプ ${cnt}個\n\nよろしいですか？`)) return;
+    takeSnapshot('読み込み前');
     S = Object.assign(structuredClone(DEFAULT), data);
     save();
     renderToday(); renderCal(); renderReward(); renderAdultGoals();
@@ -1003,6 +1082,7 @@ function confetti(){
 function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 /* ============ 起動 ============ */
+takeDailySnapshotIfNeeded();
 renderToday();
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
