@@ -54,6 +54,7 @@ main{padding:0 16px}
 .goal .emo{font-size:38px; line-height:1}
 .goal .nm{flex:1; font-weight:bold}
 .goal .meta{font-size:14px; color:var(--sub); font-weight:normal; display:block}
+.streak{font-size:14px; color:#e0781f; font-weight:bold; display:inline-block; margin-left:6px}
 .goal.done{background:#f3fbf7; border-color:var(--accent2)}
 .goal .chk{font-size:30px}
 .goalwrap{margin-bottom:12px}
@@ -434,6 +435,18 @@ setInterval(checkDateChange, 60000);
 function todayStamps(){ return S.stamps[today()] || []; }
 function todaySelectedIds(){ return new Set(S.dailySelections[today()] || []); }
 function activeGoals(){ const sel = todaySelectedIds(); return S.goals.filter(g=>sel.has(g.id)); }
+function goalStreak(g){
+  let d = new Date();
+  if(!(S.stamps[key(d)]||[]).some(s=>s.goalId===g.id)){
+    d.setDate(d.getDate()-1);
+  }
+  let count = 0;
+  while((S.stamps[key(d)]||[]).some(s=>s.goalId===g.id)){
+    count++;
+    d.setDate(d.getDate()-1);
+  }
+  return count;
+}
 function allDoneToday(){
   const ag = activeGoals();
   if(ag.length===0) return false;
@@ -466,10 +479,11 @@ function renderToday(){
     const isDone = done.has(g.id);
     const wrap = document.createElement('div');
     wrap.className = 'goalwrap';
+    const streak = goalStreak(g);
     const b = document.createElement('button');
     b.className = 'goal' + (isDone ? ' done' : '');
     b.innerHTML = `<span class="emo">${g.icon}</span>
-      <span class="nm">${esc(g.name)}
+      <span class="nm">${esc(g.name)}${streak>=2 ? `<span class="streak">🔥${streak}日れんぞく</span>` : ''}
         <span class="meta">${g.type==='timer' ? g.min+'ぷん はかる' : 'おしたら ポン'}</span></span>
       <span class="chk">${isDone ? '✅' : (deferredToday.has(g.id) ? '⏳' : '⬜️')}</span>`;
     b.onclick = ()=> tapGoal(g);
