@@ -639,12 +639,21 @@ function totalStamps(){
 }
 
 /* ============ タイマー ============ */
+const TIMER_KEY = KEY + '_timer';
+function persistTimer(goalId, endAt){
+  try{ localStorage.setItem(TIMER_KEY, JSON.stringify({goalId, endAt})); }catch(e){ /* 容量不足などは無視してよい */ }
+}
+function clearPersistedTimer(){
+  localStorage.removeItem(TIMER_KEY);
+}
 let T = null;
-function startTimer(g){
+function startTimer(g, resumeEndAt){
   const total = g.min * 60;
   // 画面が消えている間もカウントが進むよう、残り時間は「終わる時刻」から毎回計算する
-  let endAt = Date.now() + total * 1000;
-  let left = total, paused = false;
+  // アプリごと閉じられても続けられるよう、終わる時刻を localStorage にも保存しておく
+  let endAt = resumeEndAt || Date.now() + total * 1000;
+  if(!resumeEndAt) persistTimer(g.id, endAt);
+  let left = Math.max(0, Math.round((endAt - Date.now())/1000)), paused = false;
   document.getElementById('timerEmo').textContent = g.icon;
   document.getElementById('timerName').textContent = g.name;
   document.getElementById('timerView').classList.add('on');
@@ -669,7 +678,10 @@ function startTimer(g){
 
   document.getElementById('tPause').onclick = e=>{
     paused = !paused;
-    if(!paused) endAt = Date.now() + left * 1000;   // 再開したぶんだけ終わる時刻をずらす
+    if(!paused){
+      endAt = Date.now() + left * 1000;   // 再開したぶんだけ終わる時刻をずらす
+      persistTimer(g.id, endAt);
+    }
     e.target.textContent = paused ? 'つづける' : 'とめる';
   };
   document.getElementById('tQuit').onclick = ()=>{
@@ -678,8 +690,25 @@ function startTimer(g){
 }
 function stopTimer(){
   clearInterval(T); T = null;
+  clearPersistedTimer();
   document.getElementById('timerView').classList.remove('on');
   document.getElementById('tPause').textContent = 'とめる';
+}
+
+/* ---- アプリを閉じている間にタイマーが終わっていた場合の復元 ---- */
+function resumeTimerIfNeeded(){
+  const raw = localStorage.getItem(TIMER_KEY);
+  if(!raw) return;
+  let info;
+  try{ info = JSON.parse(raw); }catch(e){ clearPersistedTimer(); return; }
+  const g = S.goals.find(x=>x.id===info.goalId);
+  if(!g || todayStamps().some(s=>s.goalId===g.id)){ clearPersistedTimer(); return; }
+  if(Date.now() >= info.endAt){
+    clearPersistedTimer();
+    stamp(g);
+  }else{
+    startTimer(g, info.endAt);
+  }
 }
 
 /* ============ カレンダー ============ */
@@ -1098,6 +1127,7 @@ function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;'
 /* ============ 起動 ============ */
 takeDailySnapshotIfNeeded();
 renderToday();
+resumeTimerIfNeeded();
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
