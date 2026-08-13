@@ -260,11 +260,11 @@ input[type=text],input[type=number],select{
   </div>
 </div>
 
-<!-- ===== おとなのひと ロック（わりざん） ===== -->
+<!-- ===== おとなのひと ロック（たしざん） ===== -->
 <div class="mask" id="pinModal">
   <div class="sheet" style="text-align:center">
     <h2>おとなのひと の もんだい</h2>
-    <p class="hint">このわりざんが とけたら すすめます</p>
+    <p class="hint">このたしざんが とけたら すすめます</p>
     <div id="gateProblem" style="font-size:34px;font-weight:bold;margin:18px 0"></div>
     <input type="tel" inputmode="numeric" id="gateInput" placeholder="こたえ" style="text-align:center;font-size:26px">
     <div id="pinErr" class="hint" style="color:#c0392b;min-height:20px"></div>
@@ -308,7 +308,7 @@ input[type=text],input[type=number],select{
     <h2>おとなのひと メニュー</h2>
 
     <b>ロックについて</b>
-    <p class="hint">「きょうのもくひょうをえらぶ」と この おとなメニューを ひらくときは、わりざんの もんだいが出ます。</p>
+    <p class="hint">「きょうのもくひょうをえらぶ」と この おとなメニューを ひらくときは、たしざんの もんだいが出ます。</p>
 
     <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
 
@@ -876,13 +876,13 @@ document.getElementById('btnAdult').onclick = ()=>{
   });
 };
 
-/* ---- おとなのひと ロック（わりざんの もんだい） ---- */
+/* ---- おとなのひと ロック（たしざんの もんだい） ---- */
 let gateOnOk = null, gateAnswer = 0;
 function genGateProblem(){
-  const divisor = 2 + Math.floor(Math.random()*8);   // 2〜9
-  const quotient = 2 + Math.floor(Math.random()*11); // 2〜12
-  gateAnswer = quotient;
-  document.getElementById('gateProblem').textContent = `${divisor*quotient} ÷ ${divisor} = ？`;
+  const a = 10 + Math.floor(Math.random()*80); // 10〜89
+  const b = 10 + Math.floor(Math.random()*80); // 10〜89
+  gateAnswer = a + b;
+  document.getElementById('gateProblem').textContent = `${a} ＋ ${b} = ？`;
   document.getElementById('gateInput').value = '';
 }
 function closePinModal(){
