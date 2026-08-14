@@ -65,6 +65,11 @@ main{padding:0 16px}
   font-family:inherit; cursor:pointer;
 }
 .deferbtn.on{background:#ffedc2; border-color:#e0ac2b; font-weight:bold}
+.timewarn{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  background:#fff0f0; border:2px solid #f0b8b8; color:#c0392b;
+  border-radius:14px; padding:8px 12px; margin-bottom:6px; font-size:14px; font-weight:bold;
+}
 .empty{color:var(--sub); text-align:center; padding:40px 10px; line-height:1.9}
 .addbtn{
   width:100%; padding:16px; border-radius:22px; border:3px dashed var(--line);
@@ -507,10 +512,21 @@ function renderToday(){
     b.className = 'goal' + (isDone ? ' done' : '');
     b.innerHTML = `<span class="emo">${g.icon}</span>
       <span class="nm">${esc(g.name)}${streak>=2 ? `<span class="streak">🔥${streak}日れんぞく</span>` : ''}
-        <span class="meta">${g.type==='timer' ? g.min+'ぷん はかる' : g.type==='race' ? g.min+'ぷん いないに ゴール' : 'おしたら ポン'}</span></span>
+        <span class="meta">${g.type==='timer' ? g.min+'ぷん はかる' : g.type==='race' ? g.min+'ぷん いないに ゴール' : g.min ? 'おしたら ポン（もくひょう '+g.min+'ぷん）' : 'おしたら ポン'}</span></span>
       <span class="chk">${isDone ? '✅' : (deferredToday.has(g.id) ? '⏳' : '⬜️')}</span>`;
     b.onclick = ()=> tapGoal(g);
     wrap.appendChild(b);
+    if(!g.min){
+      const warn = document.createElement('div');
+      warn.className = 'timewarn';
+      warn.innerHTML = `<span>⚠️ じかんが まだ きまっていません！</span>`;
+      const fixBtn = document.createElement('button');
+      fixBtn.className = 'mini';
+      fixBtn.textContent = 'じかんを きめる';
+      fixBtn.onclick = ()=> requirePin(()=> openGoalModal(g));
+      warn.appendChild(fixBtn);
+      wrap.appendChild(warn);
+    }
     if(!isDone){
       const isDeferred = deferredToday.has(g.id);
       const d = document.createElement('button');
@@ -971,8 +987,11 @@ function openGoalModal(g){
   });
   updateTypeUI();
   function updateTypeUI(){
-    document.getElementById('minWrap').style.display = (pickType==='timer' || pickType==='race') ? 'block' : 'none';
-    document.getElementById('gMinLabel').textContent = pickType==='race' ? '目標じかん（なんぷん いないに おわらせる？）' : 'なんぷん？';
+    document.getElementById('minWrap').style.display = 'block';
+    document.getElementById('gMinLabel').textContent =
+      pickType==='race' ? '目標じかん（なんぷん いないに おわらせる？）'
+      : pickType==='timer' ? 'なんぷん？'
+      : 'めやすの じかん（なんぷん）';
     document.getElementById('raceExplainHint').style.display = pickType==='race' ? 'block' : 'none';
   }
   document.getElementById('gDelRow').style.display = g ? 'flex' : 'none';
@@ -983,7 +1002,13 @@ document.getElementById('gCancel').onclick = ()=> document.getElementById('goalM
 document.getElementById('gSave').onclick = ()=>{
   const name = document.getElementById('gName').value.trim();
   if(!name){ alert('なまえを いれてね'); return; }
-  const min = Math.max(1, Math.min(120, parseInt(document.getElementById('gMin').value,10) || 10));
+  const minRaw = document.getElementById('gMin').value.trim();
+  const minNum = parseInt(minRaw, 10);
+  if(!minRaw || isNaN(minNum) || minNum<1){
+    alert('じかんが きまっていません。\nなんぷんに するか、すうじを いれてね。');
+    return;
+  }
+  const min = Math.max(1, Math.min(120, minNum));
   if(editing){
     Object.assign(editing, { name, icon: pickEmo, type: pickType, min });
   }else{
