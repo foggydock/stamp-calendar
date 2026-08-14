@@ -152,6 +152,13 @@ input[type=text],input[type=number],select{
 .ring{width:180px;height:180px;margin:0 auto}
 .ring circle{fill:none; stroke-width:14; stroke-linecap:round}
 
+/* ---- スタート→ゴール ---- */
+#raceView{text-align:center; color:#fff}
+#raceView .sheet{background:linear-gradient(160deg,#4ec3a5,#5b7cfa); color:#fff; text-align:center}
+#raceView .hint{color:#fff; opacity:.95}
+#raceEmo{font-size:64px}
+#raceClock{font-size:60px; font-weight:bold; margin:14px 0}
+
 /* ---- お祝い ---- */
 #celeb .sheet{text-align:center; background:linear-gradient(160deg,#fff3d6,#ffe0e6)}
 #celeb .emo{font-size:80px; animation:pop .6s ease}
@@ -226,9 +233,11 @@ input[type=text],input[type=number],select{
     <div class="seg">
       <button data-t="tap" class="on">おしたら ポン</button>
       <button data-t="timer">じかんを はかる</button>
+      <button data-t="race">スタート→ゴール</button>
     </div>
+    <p class="hint" id="raceExplainHint" style="display:none">「スタート」を おしてから、目標の じかん いないに「ゴール」を おせたら スタンプが もらえます。</p>
     <div id="minWrap" style="display:none">
-      <label>なんぷん？</label>
+      <label id="gMinLabel">なんぷん？</label>
       <input type="number" id="gMin" value="10" min="1" max="120">
     </div>
     <div class="row">
@@ -290,6 +299,20 @@ input[type=text],input[type=number],select{
     <div class="row">
       <button class="pill ghost" id="tQuit">やめる</button>
       <button class="pill" id="tPause">とめる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== スタート→ゴール ===== -->
+<div class="mask" id="raceView">
+  <div class="sheet">
+    <div id="raceEmo">🏁</div>
+    <div id="raceName" style="font-size:22px;font-weight:bold"></div>
+    <p class="hint">「スタート」を おしてから、<b id="raceTargetText"></b> いないに「ゴール」を おせたら スタンプが もらえるよ！</p>
+    <div id="raceClock">00:00</div>
+    <div class="row">
+      <button class="pill ghost" id="rQuit">やめる</button>
+      <button class="pill" id="rStartBtn">スタート</button>
     </div>
   </div>
 </div>
@@ -484,7 +507,7 @@ function renderToday(){
     b.className = 'goal' + (isDone ? ' done' : '');
     b.innerHTML = `<span class="emo">${g.icon}</span>
       <span class="nm">${esc(g.name)}${streak>=2 ? `<span class="streak">🔥${streak}日れんぞく</span>` : ''}
-        <span class="meta">${g.type==='timer' ? g.min+'ぷん はかる' : 'おしたら ポン'}</span></span>
+        <span class="meta">${g.type==='timer' ? g.min+'ぷん はかる' : g.type==='race' ? g.min+'ぷん いないに ゴール' : 'おしたら ポン'}</span></span>
       <span class="chk">${isDone ? '✅' : (deferredToday.has(g.id) ? '⏳' : '⬜️')}</span>`;
     b.onclick = ()=> tapGoal(g);
     wrap.appendChild(b);
@@ -610,6 +633,7 @@ function tapGoal(g){
     return;
   }
   if(g.type==='timer') startTimer(g);
+  else if(g.type==='race') openRace(g);
   else stamp(g);
 }
 
@@ -709,6 +733,74 @@ function resumeTimerIfNeeded(){
   }else{
     startTimer(g, info.endAt);
   }
+}
+
+/* ============ スタート→ゴール ============ */
+const RACE_KEY = KEY + '_race';
+function persistRace(goalId, startAt){
+  try{ localStorage.setItem(RACE_KEY, JSON.stringify({goalId, startAt})); }catch(e){ /* 容量不足などは無視してよい */ }
+}
+function clearPersistedRace(){
+  localStorage.removeItem(RACE_KEY);
+}
+function openRace(g, resumeStartAt){
+  document.getElementById('raceEmo').textContent = g.icon;
+  document.getElementById('raceName').textContent = g.name;
+  document.getElementById('raceTargetText').textContent = g.min + 'ぷん';
+  document.getElementById('raceClock').textContent = '00:00';
+  document.getElementById('rStartBtn').textContent = 'スタート';
+  document.getElementById('raceView').classList.add('on');
+
+  let startAt = null, timer = null;
+
+  const tick = ()=>{
+    const el = Math.floor((Date.now()-startAt)/1000);
+    document.getElementById('raceClock').textContent = `${pad(Math.floor(el/60))}:${pad(el%60)}`;
+  };
+  const begin = ()=>{
+    startAt = Date.now();
+    persistRace(g.id, startAt);
+    document.getElementById('rStartBtn').textContent = 'ゴール！';
+    timer = setInterval(tick, 250);
+    tick();
+  };
+  const finish = ()=>{
+    clearInterval(timer); timer = null;
+    clearPersistedRace();
+    document.getElementById('raceView').classList.remove('on');
+    const elapsedSec = Math.floor((Date.now()-startAt)/1000);
+    if(elapsedSec <= g.min*60){
+      stamp(g);
+    }else{
+      showCeleb('💦', `おしい！ ${g.min}ぷん いないに ゴールできなかったよ。\nまた ちょうせんしてね！`);
+    }
+  };
+
+  document.getElementById('rStartBtn').onclick = ()=>{
+    if(!startAt) begin(); else finish();
+  };
+  document.getElementById('rQuit').onclick = ()=>{
+    if(startAt && !confirm('やめますか？ スタンプは もらえません。')) return;
+    clearInterval(timer); timer = null;
+    clearPersistedRace();
+    document.getElementById('raceView').classList.remove('on');
+  };
+
+  if(resumeStartAt){
+    startAt = resumeStartAt;
+    document.getElementById('rStartBtn').textContent = 'ゴール！';
+    timer = setInterval(tick, 250);
+    tick();
+  }
+}
+function resumeRaceIfNeeded(){
+  const raw = localStorage.getItem(RACE_KEY);
+  if(!raw) return;
+  let info;
+  try{ info = JSON.parse(raw); }catch(e){ clearPersistedRace(); return; }
+  const g = S.goals.find(x=>x.id===info.goalId);
+  if(!g || todayStamps().some(s=>s.goalId===g.id)){ clearPersistedRace(); return; }
+  openRace(g, info.startAt);
 }
 
 /* ============ カレンダー ============ */
@@ -874,10 +966,15 @@ function openGoalModal(g){
     b.onclick = ()=>{
       pickType = b.dataset.t;
       document.querySelectorAll('.seg button').forEach(x=>x.classList.toggle('on', x===b));
-      document.getElementById('minWrap').style.display = pickType==='timer' ? 'block' : 'none';
+      updateTypeUI();
     };
   });
-  document.getElementById('minWrap').style.display = pickType==='timer' ? 'block' : 'none';
+  updateTypeUI();
+  function updateTypeUI(){
+    document.getElementById('minWrap').style.display = (pickType==='timer' || pickType==='race') ? 'block' : 'none';
+    document.getElementById('gMinLabel').textContent = pickType==='race' ? '目標じかん（なんぷん いないに おわらせる？）' : 'なんぷん？';
+    document.getElementById('raceExplainHint').style.display = pickType==='race' ? 'block' : 'none';
+  }
   document.getElementById('gDelRow').style.display = g ? 'flex' : 'none';
   document.getElementById('goalModal').classList.add('on');
 }
@@ -1128,6 +1225,7 @@ function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;'
 takeDailySnapshotIfNeeded();
 renderToday();
 resumeTimerIfNeeded();
+resumeRaceIfNeeded();
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
