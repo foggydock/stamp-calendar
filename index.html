@@ -1184,14 +1184,30 @@ function renderSnapshotList(){
 }
 
 /* ---- 書き出し / 読み込み ---- */
-function exportBackup(){
-  S.lastExport = Date.now(); save();
+async function exportBackup(){
+  const filename = `もくひょうスタンプ_${today()}.json`;
   const blob = new Blob([JSON.stringify(S, null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `もくひょうスタンプ_${today()}.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+  let shared = false;
+  if(navigator.canShare){
+    try{
+      const file = new File([blob], filename, {type:'application/json'});
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title:'もくひょうスタンプ バックアップ'});
+        shared = true;
+      }
+    }catch(e){
+      if(e && e.name === 'AbortError') return; // 共有をキャンセルした場合は なにもせず終わる（書き出しずみ扱いにしない）
+      // 共有に失敗した場合は下のダウンロードにフォールバック
+    }
+  }
+  if(!shared){
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+  }
+  S.lastExport = Date.now(); save();
   renderBackupWarn();
   renderBackupBanner();
 }
