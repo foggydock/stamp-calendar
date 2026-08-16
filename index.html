@@ -483,19 +483,25 @@ function allDoneToday(){
   const done = new Set(todayStamps().map(s=>s.goalId));
   return ag.every(g=>done.has(g.id));
 }
+// 戻り値: true=その日は全部達成, false=未達成, null=もくひょうを選ばなかった日（連続記録に影響しない）
 function allDoneOn(k){
   const sel = S.dailySelections[k] || [];
-  if(sel.length===0) return false;
+  if(sel.length===0) return null;
   const done = new Set((S.stamps[k]||[]).map(s=>s.goalId));
   return sel.every(id=>done.has(id));
 }
 function dailyAllDoneStreak(){
   let d = new Date();
-  if(!allDoneOn(key(d))) d.setDate(d.getDate()-1);
+  // 今日が未達成でも、もくひょうを選んでいなければスキップして昨日から数える
+  let status = allDoneOn(key(d));
+  if(status === false){ d.setDate(d.getDate()-1); status = allDoneOn(key(d)); }
   let count = 0;
-  while(allDoneOn(key(d))){
-    count++;
+  for(let guard=0; guard<3650; guard++){ // 選ばなかった日が延々続く場合の無限ループ対策
+    if(status === true) count++;
+    else if(status === false) break;
+    // status===null（選ばなかった日）はカウントせず連続も切らずスキップ
     d.setDate(d.getDate()-1);
+    status = allDoneOn(key(d));
   }
   return count;
 }
