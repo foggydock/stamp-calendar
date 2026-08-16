@@ -211,6 +211,7 @@ input[type=text],input[type=number],select{
 
   <!-- ========== ごほうび ========== -->
   <section class="view" id="v-reward">
+    <div class="card" id="yenCard"></div>
     <div class="card" id="dailyRewardCard"></div>
     <div class="card" id="rewardCard"></div>
     <div class="card">
@@ -397,6 +398,7 @@ const DEFAULT = {
   dailyReward: { text: '' },  // きょうの もくひょうを ぜんぶ やったら出す ごほうび
   history: [],                // [{text, need, at}]
   spent: 0,                   // ごほうびに使ったスタンプ数
+  yen: 0,                     // 「きょうの もくひょう」を7日れんぞくで達成するたびに+1円のちょきん
   lastExport: null,
   v: 1
 };
@@ -480,6 +482,22 @@ function allDoneToday(){
   if(ag.length===0) return false;
   const done = new Set(todayStamps().map(s=>s.goalId));
   return ag.every(g=>done.has(g.id));
+}
+function allDoneOn(k){
+  const sel = S.dailySelections[k] || [];
+  if(sel.length===0) return false;
+  const done = new Set((S.stamps[k]||[]).map(s=>s.goalId));
+  return sel.every(id=>done.has(id));
+}
+function dailyAllDoneStreak(){
+  let d = new Date();
+  if(!allDoneOn(key(d))) d.setDate(d.getDate()-1);
+  let count = 0;
+  while(allDoneOn(key(d))){
+    count++;
+    d.setDate(d.getDate()-1);
+  }
+  return count;
 }
 
 function renderToday(){
@@ -665,7 +683,15 @@ function stamp(g){
   const justCompletedAll = !wasAllDone && allDoneToday();
   const total = totalStamps() - S.spent;
   const need = S.reward.need;
-  if(justCompletedAll && S.dailyReward && S.dailyReward.text){
+  let yenAwarded = false;
+  if(justCompletedAll && dailyAllDoneStreak()%7===0){
+    S.yen += 1;
+    yenAwarded = true;
+    save();
+  }
+  if(yenAwarded){
+    showCeleb('💰', `7日 れんぞくで もくひょう ぜんぶ できた！\n1円 ちょきんが ふえたよ！（ちょきん ${S.yen}円）`);
+  }else if(justCompletedAll && S.dailyReward && S.dailyReward.text){
     showCeleb('🏆', `きょうの もくひょう ぜんぶ できた！\n${S.dailyReward.text}`);
   }else if(S.reward.text && need>0 && total>0 && total % need === 0){
     showCeleb('🎁', `スタンプ ${need}こ たまった！\n${S.reward.text}`);
@@ -906,6 +932,14 @@ document.getElementById('dayModalClose').onclick = ()=> document.getElementById(
 
 /* ============ ごほうび ============ */
 function renderReward(){
+  const yEl = document.getElementById('yenCard');
+  const streak = dailyAllDoneStreak();
+  const toNext = streak%7===0 ? 7 : 7 - (streak%7);
+  yEl.innerHTML = `
+    <div class="hint">きょうの もくひょう ぜんぶを 7日 れんぞくで たっせいすると +1円</div>
+    <div class="big">💰 ちょきん ${S.yen}円</div>
+    <div style="font-size:14px;margin-top:6px">いま ${streak}日 れんぞく中（あと ${toNext}日で +1円）</div>`;
+
   const dEl = document.getElementById('dailyRewardCard');
   if(S.dailyReward && S.dailyReward.text){
     const ag = activeGoals();
