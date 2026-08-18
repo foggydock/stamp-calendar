@@ -149,14 +149,6 @@ input[type=text],input[type=number],select{
 }
 .seg button.on{border-color:var(--accent); background:#fff6ea; border-width:3px; font-weight:bold}
 
-/* ---- タイマー ---- */
-#timerView{text-align:center; color:#fff}
-#timerView .sheet{background:linear-gradient(160deg,#5b7cfa,#8f6bfa); color:#fff; text-align:center}
-#timerClock{font-size:72px; font-weight:bold; letter-spacing:2px; margin:10px 0}
-#timerEmo{font-size:64px}
-.ring{width:180px;height:180px;margin:0 auto}
-.ring circle{fill:none; stroke-width:14; stroke-linecap:round}
-
 /* ---- スタート→ゴール ---- */
 #raceView{text-align:center; color:#fff}
 #raceView .sheet{background:linear-gradient(160deg,#4ec3a5,#5b7cfa); color:#fff; text-align:center}
@@ -262,7 +254,6 @@ input[type=text],input[type=number],select{
     <label>やりかた</label>
     <div class="seg">
       <button data-t="tap" class="on">おしたら ポン</button>
-      <button data-t="timer">じかんを はかる</button>
       <button data-t="race">スタート→ゴール</button>
     </div>
     <p class="hint" id="raceExplainHint" style="display:none">「スタート」を おしてから、目標の じかん いないに「ゴール」を おせたら スタンプが もらえます。</p>
@@ -311,24 +302,6 @@ input[type=text],input[type=number],select{
     <div class="row">
       <button class="pill ghost" id="pinCancel">やめる</button>
       <button class="pill" id="gateOk">こたえる</button>
-    </div>
-  </div>
-</div>
-
-<!-- ===== タイマー ===== -->
-<div class="mask" id="timerView">
-  <div class="sheet">
-    <div id="timerEmo">⏳</div>
-    <div id="timerName" style="font-size:22px;font-weight:bold"></div>
-    <svg class="ring" viewBox="0 0 100 100">
-      <circle cx="50" cy="50" r="43" stroke="rgba(255,255,255,.25)"></circle>
-      <circle cx="50" cy="50" r="43" stroke="#fff" id="ringFg"
-              stroke-dasharray="270.2" stroke-dashoffset="0" transform="rotate(-90 50 50)"></circle>
-    </svg>
-    <div id="timerClock">00:00</div>
-    <div class="row">
-      <button class="pill ghost" id="tQuit">やめる</button>
-      <button class="pill" id="tPause">とめる</button>
     </div>
   </div>
 </div>
@@ -428,6 +401,7 @@ const DEFAULT = {
 };
 
 let S = load();
+migrateTimerGoals();
 
 function load(){
   try{
@@ -438,6 +412,14 @@ function load(){
     alert('きろくの よみこみに しっぱいしました: ' + e.message);
     return structuredClone(DEFAULT);
   }
+}
+// 「じかんを はかる」（とちゅうで やめられない）は はいしたので、既存のものは「スタート→ゴール」（時間いないに終わらせる）に読みかえる
+function migrateTimerGoals(){
+  let changed = false;
+  S.goals.forEach(g=>{
+    if(g.type === 'timer'){ g.type = 'race'; changed = true; }
+  });
+  if(changed) save();
 }
 function save(){
   try{
@@ -605,7 +587,7 @@ function renderToday(){
     b.className = 'goal' + (isDone ? ' done' : '');
     b.innerHTML = `<span class="emo">${g.icon}</span>
       <span class="nm">${esc(g.name)}${streak>=2 ? `<span class="streak">🔥${streak}日れんぞく</span>` : ''}
-        <span class="meta">${g.type==='timer' ? g.min+'ぷん はかる' : g.type==='race' ? g.min+'ぷん いないに ゴール' : g.min ? 'おしたら ポン（もくひょう '+g.min+'ぷん）' : 'おしたら ポン'}</span></span>
+        <span class="meta">${g.type==='race' ? g.min+'ぷん いないに ゴール' : g.min ? 'おしたら ポン（もくひょう '+g.min+'ぷん）' : 'おしたら ポン'}</span></span>
       <span class="chk">${isDone ? '✅' : (deferredToday.has(g.id) ? '⏳' : '⬜️')}</span>`;
     b.onclick = ()=> tapGoal(g);
     wrap.appendChild(b);
@@ -741,8 +723,7 @@ function tapGoal(g){
     }
     return;
   }
-  if(g.type==='timer') startTimer(g);
-  else if(g.type==='race') openRace(g);
+  if(g.type==='race') openRace(g);
   else stamp(g);
 }
 
@@ -777,79 +758,6 @@ function stamp(g){
 
 function totalStamps(){
   return Object.values(S.stamps).reduce((a,v)=>a+v.length, 0);
-}
-
-/* ============ タイマー ============ */
-const TIMER_KEY = KEY + '_timer';
-function persistTimer(goalId, endAt){
-  try{ localStorage.setItem(TIMER_KEY, JSON.stringify({goalId, endAt})); }catch(e){ /* 容量不足などは無視してよい */ }
-}
-function clearPersistedTimer(){
-  localStorage.removeItem(TIMER_KEY);
-}
-let T = null;
-function startTimer(g, resumeEndAt){
-  const total = g.min * 60;
-  // 画面が消えている間もカウントが進むよう、残り時間は「終わる時刻」から毎回計算する
-  // アプリごと閉じられても続けられるよう、終わる時刻を localStorage にも保存しておく
-  let endAt = resumeEndAt || Date.now() + total * 1000;
-  if(!resumeEndAt) persistTimer(g.id, endAt);
-  let left = Math.max(0, Math.round((endAt - Date.now())/1000)), paused = false;
-  document.getElementById('timerEmo').textContent = g.icon;
-  document.getElementById('timerName').textContent = g.name;
-  document.getElementById('timerView').classList.add('on');
-  const ring = document.getElementById('ringFg'), C = 270.2;
-
-  const draw = ()=>{
-    document.getElementById('timerClock').textContent =
-      `${pad(Math.floor(left/60))}:${pad(left%60)}`;
-    ring.style.strokeDashoffset = C * (1 - left/total);
-  };
-  draw();
-
-  T = setInterval(()=>{
-    if(paused) return;
-    left = Math.max(0, Math.round((endAt - Date.now())/1000));
-    draw();
-    if(left<=0){
-      stopTimer();
-      stamp(g);
-    }
-  }, 250);
-
-  document.getElementById('tPause').onclick = e=>{
-    paused = !paused;
-    if(!paused){
-      endAt = Date.now() + left * 1000;   // 再開したぶんだけ終わる時刻をずらす
-      persistTimer(g.id, endAt);
-    }
-    e.target.textContent = paused ? 'つづける' : 'とめる';
-  };
-  document.getElementById('tQuit').onclick = ()=>{
-    if(confirm('やめますか？ スタンプは もらえません。')) stopTimer();
-  };
-}
-function stopTimer(){
-  clearInterval(T); T = null;
-  clearPersistedTimer();
-  document.getElementById('timerView').classList.remove('on');
-  document.getElementById('tPause').textContent = 'とめる';
-}
-
-/* ---- アプリを閉じている間にタイマーが終わっていた場合の復元 ---- */
-function resumeTimerIfNeeded(){
-  const raw = localStorage.getItem(TIMER_KEY);
-  if(!raw) return;
-  let info;
-  try{ info = JSON.parse(raw); }catch(e){ clearPersistedTimer(); return; }
-  const g = S.goals.find(x=>x.id===info.goalId);
-  if(!g || todayStamps().some(s=>s.goalId===g.id)){ clearPersistedTimer(); return; }
-  if(Date.now() >= info.endAt){
-    clearPersistedTimer();
-    stamp(g);
-  }else{
-    startTimer(g, info.endAt);
-  }
 }
 
 /* ============ スタート→ゴール ============ */
@@ -1099,7 +1007,6 @@ function openGoalModal(g){
     document.getElementById('minWrap').style.display = 'block';
     document.getElementById('gMinLabel').textContent =
       pickType==='race' ? '目標じかん（なんぷん いないに おわらせる？）'
-      : pickType==='timer' ? 'なんぷん？'
       : 'めやすの じかん（なんぷん）';
     document.getElementById('raceExplainHint').style.display = pickType==='race' ? 'block' : 'none';
   }
@@ -1375,7 +1282,7 @@ function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;'
 takeDailySnapshotIfNeeded();
 renderToday();
 showEncourage();
-resumeTimerIfNeeded();
+localStorage.removeItem(KEY + '_timer'); // はいしした「じかんを はかる」の のこりデータを そうじ
 resumeRaceIfNeeded();
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
