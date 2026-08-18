@@ -174,14 +174,25 @@ input[type=text],input[type=number],select{
 
 /* ---- おうえんメッセージ ---- */
 #encourage{
-  position:fixed; right:14px; bottom:calc(78px + env(safe-area-inset-bottom));
-  max-width:min(72vw, 260px); background:#fff; color:var(--ink);
-  border:2px solid var(--line); border-radius:18px 18px 4px 18px;
-  padding:10px 14px; font-size:14px; line-height:1.5; box-shadow:var(--shadow);
-  z-index:20; opacity:0; transform:translateY(6px) scale(.96);
+  position:fixed; right:12px; bottom:calc(82px + env(safe-area-inset-bottom));
+  max-width:min(78vw, 270px); display:flex; align-items:flex-end; gap:6px;
+  z-index:20; opacity:0; transform:translateY(10px) scale(.9);
   transition:opacity .25s ease, transform .25s ease; pointer-events:none;
 }
-#encourage.on{opacity:1; transform:translateY(0) scale(1); pointer-events:auto}
+#encourage.on{opacity:1; transform:translateY(0) scale(1); pointer-events:auto; animation:encourageBob 2.2s ease-in-out .3s infinite}
+#encourage .face{
+  flex:none; font-size:34px; line-height:1; width:46px; height:46px;
+  display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(160deg,#ffe3ae,#ffc7d1); border-radius:50%;
+  border:3px solid #fff; box-shadow:var(--shadow);
+}
+#encourage .bubble{
+  background:#fff; color:var(--ink);
+  border:3px solid var(--accent); border-radius:18px 18px 18px 4px;
+  padding:10px 14px; font-size:15px; font-weight:bold; line-height:1.55;
+  box-shadow:var(--shadow);
+}
+@keyframes encourageBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 
 .hint{font-size:14px; color:var(--sub); line-height:1.7}
 .listitem{display:flex; align-items:center; gap:10px; padding:12px 0; border-bottom:1px solid var(--line)}
@@ -447,28 +458,29 @@ function dateLabel(k){
 }
 
 /* ============ おうえんメッセージ ============ */
+const ENCOURAGE_FACES = ['🐻','🐥','🐰','🦊','🐶','🐼'];
 const ENCOURAGE_MESSAGES = [
-  '小さな「できた！」のつみ木が、どんどん 大きなお城になっていくよ！',
-  'まいにちの がんばりは、ぜったいに 消えない そうしくんの宝物！',
-  '1ミリずつの 前進が、いつのまにか すごく遠くまで つれていってくれるよ！',
-  'まいにちの「1回」が、未来の そうしくんを スーパーマンにするんだ！',
-  'スタンプの数だけ、そうしくんの 心に「強いパワー」が たまっているよ！',
-  'コツコツ進むのは、じつは いちばんの 近道なんだよ！',
-  'まいにちの 努力は、だれにも うばえない そうしくんだけの 武器になる！',
-  '「めんどくさい」に 勝った 今日のそうしくん、ほんとうに 強い！',
-  'じぶんで決めた やくそくを まもれる男の子、最高に かっこいいよ！',
-  'まいにち やるって、世界で いちばん 強い 才能なんだ！',
-  '今日も アプリを ひらいた。それだけで もう 100点スタート！',
-  'きのうの じぶんを、今日も ちゃんと こえられたね！',
-  'つづけている そうしくんは、もう じぶんの力で 前にすすむ 勇者（ゆうしゃ）だよ！',
+  'ちいさな「できた！」が、おおきな ちからに なるよ！',
+  'まいにちの がんばりは、きえない たからもの！',
+  'すこしずつの まえすすみが、とおくまで つれていってくれるよ！',
+  'まいにちの「１かい」が、みらいの そうしくんを つよくするよ！',
+  'スタンプの かずだけ、こころに ちからが たまっていくよ！',
+  'コツコツ すすむのが、いちばんの ちかみちなんだよ！',
+  'まいにちの どりょくは、そうしくんだけの ぶきに なる！',
+  '「めんどくさい」に かった きょうの そうしくん、つよいね！',
+  'じぶんで きめた やくそくを まもれるの、かっこいいよ！',
+  'まいにち やるって、せかいで いちばん つよい さいのう！',
+  'きょうも アプリを ひらいた。それだけで もう １００てん！',
+  'きのうの じぶんを、きょうも ちゃんと こえられたね！',
+  'つづけている そうしくんは、じぶんの ちからで すすむ ゆうしゃだよ！',
   '「つづける」を えらんだ そうしくん、ナイスチャレンジ！',
-  '雨の日も 晴れの日も、コツコツつづける そうしくんが 誇（ほこ）らしいよ！',
-  'はじめたことも すごいけど、まいにち つづけているのは もっと すごい！',
-  'どんなに 小さな一歩でも、すすんでいることに まちがいはないよ！',
-  'つづけた日数は、そうしくんが じぶんで 作った「自信」の数だよ！',
-  'あきらめずに くりかえすたび、そうしくんの「とくい」が ピカピカに 光りだす！',
-  '1回やるたびに、そうしくんの レベルは かならず 1上がってるよ！',
-  'まいにちの がんばり、しっかり 見届けているよ！'
+  'あめの ひも はれの ひも、コツコツ つづける そうしくんが ほこらしいよ！',
+  'はじめたのも すごいけど、まいにち つづけているのは もっと すごい！',
+  'どんなに ちいさな いっぽでも、すすんでることに まちがいないよ！',
+  'つづけた ひかずは、じぶんで つくった「じしん」の かずだよ！',
+  'あきらめずに くりかえすたび、とくいが ピカピカ ひかりだすよ！',
+  '１かい やるたびに、そうしくんの レベルは かならず １あがってるよ！',
+  'まいにちの がんばり、しっかり みてるよ！'
 ];
 let lastEncourageMsg = null;
 function pickEncourageMessage(){
@@ -482,7 +494,10 @@ function pickEncourageMessage(){
 function showEncourage(){
   const el = document.getElementById('encourage');
   if(!el) return;
-  el.textContent = pickEncourageMessage();
+  el.classList.remove('on');
+  const face = ENCOURAGE_FACES[Math.floor(Math.random()*ENCOURAGE_FACES.length)];
+  el.innerHTML = `<span class="face">${face}</span><span class="bubble">${esc(pickEncourageMessage())}</span>`;
+  void el.offsetWidth; // アニメーションを毎回さいせいさせるための リフロー
   el.classList.add('on');
 }
 
