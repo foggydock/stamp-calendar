@@ -148,6 +148,10 @@ input[type=text],input[type=number],select{
   font-family:inherit; font-size:17px; color:var(--ink); cursor:pointer;
 }
 .seg button.on{border-color:var(--accent); background:#fff6ea; border-width:3px; font-weight:bold}
+#typeExplainHint{
+  background:#fff6ea; border:2px solid #f0d9a8; border-radius:12px;
+  padding:10px 12px; margin-top:8px; color:#8b6b2e;
+}
 
 /* ---- スタート→ゴール ---- */
 #raceView{text-align:center; color:#fff}
@@ -256,7 +260,7 @@ input[type=text],input[type=number],select{
       <button data-t="tap" class="on">おしたら ポン</button>
       <button data-t="race">スタート→ゴール</button>
     </div>
-    <p class="hint" id="raceExplainHint" style="display:none">「スタート」を おしてから、目標の じかん いないに「ゴール」を おせたら スタンプが もらえます。</p>
+    <p class="hint" id="typeExplainHint"></p>
     <div id="minWrap" style="display:none">
       <label id="gMinLabel">なんぷん？</label>
       <input type="number" id="gMin" value="10" min="1" max="120">
@@ -1008,7 +1012,10 @@ function openGoalModal(g){
     document.getElementById('gMinLabel').textContent =
       pickType==='race' ? '目標じかん（なんぷん いないに おわらせる？）'
       : 'めやすの じかん（なんぷん）';
-    document.getElementById('raceExplainHint').style.display = pickType==='race' ? 'block' : 'none';
+    document.getElementById('typeExplainHint').textContent =
+      pickType==='race'
+        ? '💡「スタート」を おしてから、目標の じかん いないに「ゴール」を おせたら スタンプが もらえます。（早く おわっても だいじょうぶ！）'
+        : '💡 ボタンを おすだけで スタンプが もらえます。じかんは めやすとして 表示されるだけで、待つ ひつようは ありません。';
   }
   document.getElementById('gDelRow').style.display = g ? 'flex' : 'none';
   document.getElementById('goalModal').classList.add('on');
