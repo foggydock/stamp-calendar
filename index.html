@@ -172,6 +172,17 @@ input[type=text],input[type=number],select{
 .confetti i{position:absolute; width:10px; height:16px; border-radius:3px; animation:fall linear forwards}
 @keyframes fall{to{transform:translateY(110vh) rotate(720deg); opacity:.9}}
 
+/* ---- おうえんメッセージ ---- */
+#encourage{
+  position:fixed; right:14px; bottom:calc(78px + env(safe-area-inset-bottom));
+  max-width:min(72vw, 260px); background:#fff; color:var(--ink);
+  border:2px solid var(--line); border-radius:18px 18px 4px 18px;
+  padding:10px 14px; font-size:14px; line-height:1.5; box-shadow:var(--shadow);
+  z-index:20; opacity:0; transform:translateY(6px) scale(.96);
+  transition:opacity .25s ease, transform .25s ease; pointer-events:none;
+}
+#encourage.on{opacity:1; transform:translateY(0) scale(1); pointer-events:auto}
+
 .hint{font-size:14px; color:var(--sub); line-height:1.7}
 .listitem{display:flex; align-items:center; gap:10px; padding:12px 0; border-bottom:1px solid var(--line)}
 .listitem .emo{font-size:28px}
@@ -220,6 +231,8 @@ input[type=text],input[type=number],select{
     </div>
   </section>
 </main>
+
+<div id="encourage"></div>
 
 <nav>
   <button class="on" data-v="today"><span>⭐️</span>きょう</button>
@@ -433,6 +446,40 @@ function dateLabel(k){
   return `${m}がつ${d}にち`;
 }
 
+/* ============ おうえんメッセージ ============ */
+const ENCOURAGE_MESSAGES = [
+  'そうしくん、きょうも えらいね！',
+  'いつも がんばってるの、ちゃんと 見てるよ！',
+  'きょうも いちにち、がんばろうね！',
+  'そうしくんなら できる！',
+  'すこしずつでも 前に すすんでるよ！',
+  'きのうより ちょっとだけ すごい そうしくん！',
+  'できたことが いちばん すごい！',
+  'そうしくんの ペースで だいじょうぶ！',
+  'やる気 スイッチ、もう 入ってるよ！',
+  'たのしみながら やろうね！',
+  'がんばる そうしくん、かっこいいよ！',
+  'きょうも いい一日に なりそう！',
+  'ひとつずつ できたら はなまる！',
+  'そうしくんの すきなこと、おうえんしてるよ！',
+  'むりせず、ぼちぼち いこうね！'
+];
+let lastEncourageMsg = null;
+function pickEncourageMessage(){
+  if(ENCOURAGE_MESSAGES.length<=1) return ENCOURAGE_MESSAGES[0];
+  let m;
+  do{ m = ENCOURAGE_MESSAGES[Math.floor(Math.random()*ENCOURAGE_MESSAGES.length)]; }
+  while(m === lastEncourageMsg);
+  lastEncourageMsg = m;
+  return m;
+}
+function showEncourage(){
+  const el = document.getElementById('encourage');
+  if(!el) return;
+  el.textContent = pickEncourageMessage();
+  el.classList.add('on');
+}
+
 /* ============ 画面切替 ============ */
 const TITLES = {today:'きょうの もくひょう', cal:'スタンプ カレンダー', reward:'ごほうび'};
 let curView = 'today';
@@ -444,6 +491,7 @@ document.querySelectorAll('nav button').forEach(b=>{
     document.getElementById('title').textContent = TITLES[v];
     if(v==='cal') renderCal();
     if(v==='reward') renderReward();
+    if(v==='today') showEncourage();
   };
 });
 
@@ -1305,6 +1353,7 @@ function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;'
 /* ============ 起動 ============ */
 takeDailySnapshotIfNeeded();
 renderToday();
+showEncourage();
 resumeTimerIfNeeded();
 resumeRaceIfNeeded();
 if('serviceWorker' in navigator){
