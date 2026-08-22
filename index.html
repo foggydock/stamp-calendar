@@ -93,14 +93,12 @@ main{padding:0 16px}
 
 /* ---- せいせき ---- */
 .heatwrap{overflow-x:auto; padding-bottom:4px}
-.heatcols{display:flex; gap:3px; width:max-content}
-.weekcol{display:flex; flex-direction:column; align-items:center; gap:3px}
-.wclabel{
-  font-size:9px; color:var(--sub); height:24px; width:16px;
-  writing-mode:vertical-rl; transform:rotate(180deg);
-  display:flex; align-items:flex-end; justify-content:center; white-space:nowrap;
-}
-.hc{width:16px; height:16px; border-radius:4px; background:var(--line); flex:none}
+.heatrows{display:flex; flex-direction:column; gap:3px; width:max-content}
+.heatdowrow{display:flex; gap:3px; padding-left:52px}
+.heatdowrow span{width:20px; font-size:11px; color:var(--sub); text-align:center; flex:none}
+.weekrow{display:flex; align-items:center; gap:3px}
+.wrlabel{width:46px; font-size:11px; color:var(--sub); text-align:right; flex:none; padding-right:6px}
+.hc{width:20px; height:20px; border-radius:4px; background:var(--line); flex:none}
 .heatlegend{display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; font-size:12px; color:var(--sub)}
 .heatlegend .hc{width:12px; height:12px; border-radius:3px; display:inline-block}
 .goalstat{margin-bottom:18px}
@@ -980,15 +978,18 @@ function goalCreatedAt(g){
   const n = Number(String(g.id).replace(/^g/, ''));
   return isNaN(n) ? 0 : n;
 }
+const DOW_SHORT = ['日','月','火','水','木','金','土'];
 function renderHeatCols(cols, colorFn){
-  return `<div class="heatcols">${cols.map(c=>`
-    <div class="weekcol">
-      <div class="wclabel">${c.sunLabel}</div>
+  const head = `<div class="heatdowrow">${DOW_SHORT.map(w=>`<span>${w}</span>`).join('')}</div>`;
+  const rows = cols.map(c=>`
+    <div class="weekrow">
+      <span class="wrlabel">${c.sunLabel}〜</span>
       ${c.days.map(k=> k
         ? `<span class="hc" style="background:${colorFn(k)}" title="${dateLabel(k)}"></span>`
         : `<span class="hc" style="background:transparent"></span>`
       ).join('')}
-    </div>`).join('')}</div>`;
+    </div>`).join('');
+  return `<div class="heatrows">${head}${rows}</div>`;
 }
 function renderStats(){
   const cols = buildWeekColumns(STATS_WEEKS);
