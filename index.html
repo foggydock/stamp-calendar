@@ -132,6 +132,11 @@ nav button{
 }
 nav button span{font-size:26px}
 nav button.on{color:var(--accent); font-weight:bold}
+.navbadge{
+  position:absolute; top:-4px; right:-8px; min-width:17px; height:17px; padding:0 3px;
+  border-radius:99px; background:#ff6b6b; color:#fff; font-size:10px; font-weight:bold;
+  display:flex; align-items:center; justify-content:center; line-height:1; box-shadow:0 0 0 2px #fff;
+}
 
 /* ---- モーダル ---- */
 .mask{
@@ -267,7 +272,7 @@ input[type=text],input[type=number],select{
 <div id="encourage"></div>
 
 <nav>
-  <button class="on" data-v="today"><span>⭐️</span>きょう</button>
+  <button class="on" data-v="today"><span style="position:relative;display:inline-block">⭐️<b id="pendingBadge" class="navbadge" style="display:none"></b></span>きょう</button>
   <button data-v="cal"><span>📅</span>カレンダー</button>
   <button data-v="stats"><span>📊</span>せいせき</button>
   <button data-v="reward"><span>🎁</span>ごほうび</button>
@@ -609,6 +614,7 @@ function renderToday(){
     `${d.getMonth()+1}がつ ${d.getDate()}にち<small>${WD[d.getDay()]}</small>`;
 
   renderPendingReview();
+  updatePendingBadge();
   renderBackupBanner();
 
   const list = document.getElementById('goalList');
@@ -682,6 +688,18 @@ function pendingReviews(){
     });
   });
   return out;
+}
+// 「あした きめる」の けっちゃく まちが うもれないよう、ナビの「きょう」に 件数バッジを出す
+function updatePendingBadge(){
+  const el = document.getElementById('pendingBadge');
+  if(!el) return;
+  const n = pendingReviews().length;
+  if(n > 0){
+    el.textContent = n > 9 ? '9+' : String(n);
+    el.style.display = 'flex';
+  }else{
+    el.style.display = 'none';
+  }
 }
 function resolvePending(dateKey, goal, didIt){
   const arr = (S.deferred[dateKey]||[]).filter(id=>id!==goal.id);
