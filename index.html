@@ -644,12 +644,28 @@ function pendingReviews(){
 function resolvePending(dateKey, goal, didIt){
   const arr = (S.deferred[dateKey]||[]).filter(id=>id!==goal.id);
   if(arr.length) S.deferred[dateKey] = arr; else delete S.deferred[dateKey];
+  const wasAllDone = allDoneOn(dateKey);
   if(didIt){
     (S.stamps[dateKey] = S.stamps[dateKey] || []).push({
       id:'st'+Date.now()+Math.random(), goalId:goal.id, icon:goal.icon, name:goal.name, ts:Date.now()
     });
   }
   save(); renderToday(); renderCal();
+  const justCompletedAll = didIt && !wasAllDone && allDoneOn(dateKey)===true;
+  if(justCompletedAll){
+    confetti();
+    let yenAwarded = false;
+    if(dailyAllDoneStreak()%7===0){
+      S.yen += 1;
+      yenAwarded = true;
+      save();
+    }
+    if(yenAwarded){
+      showCeleb('💰', `7日 れんぞくで もくひょう ぜんぶ できた！\n1円 ちょきんが ふえたよ！（ちょきん ${S.yen}円）`);
+    }else if(S.dailyReward && S.dailyReward.text){
+      showCeleb('🏆', `${dateLabel(dateKey)}の もくひょう ぜんぶ できた！\n${S.dailyReward.text}`);
+    }
+  }
 }
 function renderPendingReview(){
   const el = document.getElementById('pendingReview');
