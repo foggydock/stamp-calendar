@@ -532,12 +532,6 @@ function goalStreak(g){
   }
   return count;
 }
-function allDoneToday(){
-  const ag = activeGoals();
-  if(ag.length===0) return false;
-  const done = new Set(todayStamps().map(s=>s.goalId));
-  return ag.every(g=>done.has(g.id));
-}
 // 戻り値: true=その日は全部達成, false=未達成, null=もくひょうを選ばなかった日（連続記録に影響しない）
 function allDoneOn(k){
   const sel = S.dailySelections[k] || [];
@@ -559,6 +553,26 @@ function dailyAllDoneStreak(){
     status = allDoneOn(key(d));
   }
   return count;
+}
+// その日の全達成スタンプ演出（7日れんぞく1円ちょきん／当日リワード）をまとめて処理する。
+// stamp() だけでなく、翌日判定(resolvePending)や過去日編集(renderDayDetail)など
+// スタンプを書き込むすべての経路から呼ぶことで、演出の呼び忘れを防ぐ。
+function celebrateAllDoneIfNeeded(dateKey, wasAllDone){
+  const justCompletedAll = !wasAllDone && allDoneOn(dateKey)===true;
+  if(!justCompletedAll) return false;
+  let yenAwarded = false;
+  if(dailyAllDoneStreak()%7===0){
+    S.yen += 1;
+    yenAwarded = true;
+    save();
+  }
+  if(yenAwarded){
+    showCeleb('💰', `7日 れんぞくで もくひょう ぜんぶ できた！\n1円 ちょきんが ふえたよ！（ちょきん ${S.yen}円）`);
+  }else if(S.dailyReward && S.dailyReward.text){
+    const label = dateKey===today() ? 'きょうの' : dateLabel(dateKey)+'の';
+    showCeleb('🏆', `${label} もくひょう ぜんぶ できた！\n${S.dailyReward.text}`);
+  }
+  return true;
 }
 
 function renderToday(){
@@ -651,21 +665,7 @@ function resolvePending(dateKey, goal, didIt){
     });
   }
   save(); renderToday(); renderCal();
-  const justCompletedAll = didIt && !wasAllDone && allDoneOn(dateKey)===true;
-  if(justCompletedAll){
-    confetti();
-    let yenAwarded = false;
-    if(dailyAllDoneStreak()%7===0){
-      S.yen += 1;
-      yenAwarded = true;
-      save();
-    }
-    if(yenAwarded){
-      showCeleb('💰', `7日 れんぞくで もくひょう ぜんぶ できた！\n1円 ちょきんが ふえたよ！（ちょきん ${S.yen}円）`);
-    }else if(S.dailyReward && S.dailyReward.text){
-      showCeleb('🏆', `${dateLabel(dateKey)}の もくひょう ぜんぶ できた！\n${S.dailyReward.text}`);
-    }
-  }
+  if(didIt) celebrateAllDoneIfNeeded(dateKey, wasAllDone);
 }
 function renderPendingReview(){
   const el = document.getElementById('pendingReview');
@@ -749,27 +749,18 @@ function tapGoal(g){
 
 function stamp(g){
   const k = today();
-  const wasAllDone = allDoneToday();
+  const wasAllDone = allDoneOn(k);
   (S.stamps[k] = S.stamps[k] || []).push({
     id: 'st'+Date.now(), goalId: g.id, icon: g.icon, name: g.name, ts: Date.now()
   });
   save();
   renderToday();
   confetti();
-  const justCompletedAll = !wasAllDone && allDoneToday();
+  const awarded = celebrateAllDoneIfNeeded(k, wasAllDone);
+  if(awarded) return;
   const total = totalStamps() - S.spent;
   const need = S.reward.need;
-  let yenAwarded = false;
-  if(justCompletedAll && dailyAllDoneStreak()%7===0){
-    S.yen += 1;
-    yenAwarded = true;
-    save();
-  }
-  if(yenAwarded){
-    showCeleb('💰', `7日 れんぞくで もくひょう ぜんぶ できた！\n1円 ちょきんが ふえたよ！（ちょきん ${S.yen}円）`);
-  }else if(justCompletedAll && S.dailyReward && S.dailyReward.text){
-    showCeleb('🏆', `きょうの もくひょう ぜんぶ できた！\n${S.dailyReward.text}`);
-  }else if(S.reward.text && need>0 && total>0 && total % need === 0){
+  if(S.reward.text && need>0 && total>0 && total % need === 0){
     showCeleb('🎁', `スタンプ ${need}こ たまった！\n${S.reward.text}`);
   }else{
     showCeleb(g.icon, 'スタンプ ゲット！');
@@ -911,6 +902,7 @@ function renderDayDetail(){
       <span class="chk">${done ? '✅' : '⬜️'}</span>`;
     b.onclick = ()=>{
       const arr = S.stamps[k] || [];
+      const wasAllDone = allDoneOn(k);
       if(done){
         S.stamps[k] = arr.filter(s=>s.goalId!==g.id);
         if(S.stamps[k].length===0) delete S.stamps[k];
@@ -920,6 +912,7 @@ function renderDayDetail(){
         });
       }
       save();
+      if(!done) celebrateAllDoneIfNeeded(k, wasAllDone);
       renderDayDetail();
       renderCal();
       if(k===today()) renderToday();
