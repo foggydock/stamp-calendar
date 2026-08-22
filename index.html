@@ -91,6 +91,21 @@ main{padding:0 16px}
 .cell.today{border-color:var(--accent); border-width:3px}
 .cell .st{line-height:1.05; word-break:break-all; text-align:center; display:flex; flex-wrap:wrap; align-items:center; justify-content:center}
 
+/* ---- せいせき ---- */
+.heatwrap{overflow-x:auto; padding-bottom:4px}
+.heatgrid{
+  display:grid; grid-template-rows:repeat(7,1fr); grid-auto-flow:column; grid-auto-columns:16px;
+  gap:3px; width:max-content;
+}
+.heatgrid .hc{width:16px; height:16px; border-radius:4px; background:var(--line)}
+.heatlegend{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--sub); margin-top:8px}
+.heatlegend .hc{width:12px; height:12px; border-radius:3px; display:inline-block}
+.goalstat{margin-bottom:18px}
+.goalstat .gshead{display:flex; align-items:center; gap:8px; margin-bottom:6px}
+.goalstat .gshead .emo{font-size:24px}
+.goalstat .gshead .nm{font-weight:bold; flex:1}
+.goalstat .gsnum{font-size:13px; color:var(--sub)}
+
 /* ---- ごほうび ---- */
 .card{background:var(--card); border:3px solid var(--line); border-radius:22px; padding:18px; margin-bottom:14px; box-shadow:var(--shadow)}
 .bar{height:22px; background:#f0eade; border-radius:99px; overflow:hidden; margin:10px 0}
@@ -227,6 +242,15 @@ input[type=text],input[type=number],select{
     <p class="hint" id="calSum" style="text-align:center;margin-top:14px"></p>
   </section>
 
+  <!-- ========== せいせき ========== -->
+  <section class="view" id="v-stats">
+    <div class="card" id="statsOverallCard"></div>
+    <div class="card">
+      <b>もくひょうごとの きろく</b>
+      <div id="statsGoalList" style="margin-top:12px"></div>
+    </div>
+  </section>
+
   <!-- ========== ごほうび ========== -->
   <section class="view" id="v-reward">
     <div class="card" id="yenCard"></div>
@@ -244,6 +268,7 @@ input[type=text],input[type=number],select{
 <nav>
   <button class="on" data-v="today"><span>⭐️</span>きょう</button>
   <button data-v="cal"><span>📅</span>カレンダー</button>
+  <button data-v="stats"><span>📊</span>せいせき</button>
   <button data-v="reward"><span>🎁</span>ごほうび</button>
 </nav>
 
@@ -488,7 +513,7 @@ function showEncourage(){
 }
 
 /* ============ 画面切替 ============ */
-const TITLES = {today:'きょうの もくひょう', cal:'スタンプ カレンダー', reward:'ごほうび'};
+const TITLES = {today:'きょうの もくひょう', cal:'スタンプ カレンダー', stats:'せいせき', reward:'ごほうび'};
 let curView = 'today';
 document.querySelectorAll('nav button').forEach(b=>{
   b.onclick = ()=>{
@@ -497,6 +522,7 @@ document.querySelectorAll('nav button').forEach(b=>{
     document.querySelectorAll('.view').forEach(s=>s.classList.toggle('on', s.id==='v-'+v));
     document.getElementById('title').textContent = TITLES[v];
     if(v==='cal') renderCal();
+    if(v==='stats') renderStats();
     if(v==='reward') renderReward();
     if(v==='today') showEncourage();
   };
@@ -511,6 +537,7 @@ function checkDateChange(){
   takeDailySnapshotIfNeeded();
   renderToday();
   if(curView === 'cal'){ calM = new Date(); renderCal(); }
+  if(curView === 'stats') renderStats();
   if(curView === 'reward') renderReward();
 }
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) checkDateChange(); });
@@ -925,6 +952,92 @@ document.getElementById('dayBtnSelect').onclick = ()=>{
   document.getElementById('goalSelectModal').classList.add('on');
 };
 document.getElementById('dayModalClose').onclick = ()=> document.getElementById('dayModal').classList.remove('on');
+
+/* ============ せいせき ============ */
+const STATS_DAYS = 70; // 直近何日ぶんのヒートマップを出すか（7の倍数：10週間ぶん）
+function lastNDateKeys(n){
+  const out = [];
+  const d = new Date();
+  for(let i=n-1;i>=0;i--){
+    const dd = new Date(d); dd.setDate(d.getDate()-i);
+    out.push(key(dd));
+  }
+  return out;
+}
+function goalCreatedAt(g){
+  const n = Number(String(g.id).replace(/^g/, ''));
+  return isNaN(n) ? 0 : n;
+}
+function heatCellsHTML(days, colorFn){
+  return days.map(k=>{
+    const c = colorFn(k);
+    return `<span class="hc" style="background:${c}" title="${dateLabel(k)}"></span>`;
+  }).join('');
+}
+function renderStats(){
+  const days = lastNDateKeys(STATS_DAYS);
+
+  // ---- ぜんたい（その日のもくひょうを ぜんぶ できたか） ----
+  const overallEl = document.getElementById('statsOverallCard');
+  const streak = dailyAllDoneStreak();
+  let doneCnt = 0, targetCnt = 0;
+  days.forEach(k=>{
+    const st = allDoneOn(k);
+    if(st===null) return;
+    targetCnt++;
+    if(st===true) doneCnt++;
+  });
+  const rate = targetCnt>0 ? Math.round(doneCnt/targetCnt*100) : null;
+  overallEl.innerHTML = `
+    <b>ぜんぶ できた日（直近${STATS_DAYS}日）</b>
+    <div class="hint" style="margin:6px 0 8px">🟩＝ぜんぶできた日　🟥＝できなかった日　⬜️＝もくひょうを えらばなかった日</div>
+    <div class="heatwrap"><div class="heatgrid">${heatCellsHTML(days, k=>{
+      const st = allDoneOn(k);
+      if(st===true) return 'var(--accent2)';
+      if(st===false) return 'var(--pink)';
+      return 'var(--line)';
+    })}</div></div>
+    <div style="margin-top:10px;font-size:15px">
+      🔥 いま <b>${streak}日</b> れんぞく中
+      ${rate!==null ? `／ たっせいりつ <b>${rate}%</b>（${doneCnt}/${targetCnt}日）` : ''}
+    </div>`;
+
+  // ---- もくひょうごと ----
+  const listEl = document.getElementById('statsGoalList');
+  listEl.innerHTML = '';
+  if(S.goals.length === 0){
+    listEl.innerHTML = '<div class="empty">まだ もくひょうが ありません。</div>';
+    return;
+  }
+  S.goals.forEach(g=>{
+    const createdAt = goalCreatedAt(g);
+    const gStreak = goalStreak(g);
+    let doneD = 0, existD = 0;
+    days.forEach(k=>{
+      const [y,m,d] = k.split('-').map(Number);
+      const dayStart = new Date(y,m-1,d,0,0,0).getTime();
+      if(dayStart < createdAt - 86400000) return; // 作る前の日はカウントしない
+      existD++;
+      if((S.stamps[k]||[]).some(s=>s.goalId===g.id)) doneD++;
+    });
+    const totalCnt = Object.values(S.stamps).reduce((a,v)=>a+v.filter(s=>s.goalId===g.id).length,0);
+    const wrap = document.createElement('div');
+    wrap.className = 'goalstat';
+    wrap.innerHTML = `
+      <div class="gshead">
+        <span class="emo">${g.icon}</span>
+        <span class="nm">${esc(g.name)}${gStreak>=2 ? `<span class="streak">🔥${gStreak}日</span>` : ''}</span>
+      </div>
+      <div class="heatwrap"><div class="heatgrid">${heatCellsHTML(days, k=>{
+        const [y,m,d] = k.split('-').map(Number);
+        const dayStart = new Date(y,m-1,d,0,0,0).getTime();
+        if(dayStart < createdAt - 86400000) return 'transparent';
+        return (S.stamps[k]||[]).some(s=>s.goalId===g.id) ? g.icon && 'var(--accent)' : 'var(--line)';
+      })}</div></div>
+      <div class="gsnum">これまで <b>${totalCnt}</b>こ　／　直近${STATS_DAYS}日で <b>${existD>0 ? Math.round(doneD/existD*100) : 0}%</b> の日に できた（${doneD}/${existD}日）</div>`;
+    listEl.appendChild(wrap);
+  });
+}
 
 /* ============ ごほうび ============ */
 function renderReward(){
