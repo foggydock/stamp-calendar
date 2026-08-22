@@ -93,12 +93,15 @@ main{padding:0 16px}
 
 /* ---- せいせき ---- */
 .heatwrap{overflow-x:auto; padding-bottom:4px}
-.heatgrid{
-  display:grid; grid-template-rows:repeat(7,1fr); grid-auto-flow:column; grid-auto-columns:16px;
-  gap:3px; width:max-content;
+.heatcols{display:flex; gap:3px; width:max-content}
+.weekcol{display:flex; flex-direction:column; align-items:center; gap:3px}
+.wclabel{
+  font-size:9px; color:var(--sub); height:24px; width:16px;
+  writing-mode:vertical-rl; transform:rotate(180deg);
+  display:flex; align-items:flex-end; justify-content:center; white-space:nowrap;
 }
-.heatgrid .hc{width:16px; height:16px; border-radius:4px; background:var(--line)}
-.heatlegend{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--sub); margin-top:8px}
+.hc{width:16px; height:16px; border-radius:4px; background:var(--line); flex:none}
+.heatlegend{display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; font-size:12px; color:var(--sub)}
 .heatlegend .hc{width:12px; height:12px; border-radius:3px; display:inline-block}
 .goalstat{margin-bottom:18px}
 .goalstat .gshead{display:flex; align-items:center; gap:8px; margin-bottom:6px}
@@ -954,34 +957,49 @@ document.getElementById('dayBtnSelect').onclick = ()=>{
 document.getElementById('dayModalClose').onclick = ()=> document.getElementById('dayModal').classList.remove('on');
 
 /* ============ せいせき ============ */
-const STATS_DAYS = 70; // 直近何日ぶんのヒートマップを出すか（7の倍数：10週間ぶん）
-function lastNDateKeys(n){
-  const out = [];
-  const d = new Date();
-  for(let i=n-1;i>=0;i--){
-    const dd = new Date(d); dd.setDate(d.getDate()-i);
-    out.push(key(dd));
+const STATS_WEEKS = 10; // 直近何週間ぶんのヒートマップを出すか（1れつ＝日〜土の1週間）
+// 「あした きめる」で まだ けっちゃくが ついていない もくひょうか
+function isPendingOn(k, goalId){ return (S.deferred[k]||[]).includes(goalId); }
+// 週ごとの列データを作る： いちばん右の列＝こんしゅう（今日をふくむ、日ようびはじまり）
+function buildWeekColumns(numWeeks){
+  const t = new Date(); t.setHours(0,0,0,0);
+  const thisSun = new Date(t); thisSun.setDate(t.getDate() - t.getDay());
+  const cols = [];
+  for(let w=numWeeks-1; w>=0; w--){
+    const sun = new Date(thisSun); sun.setDate(thisSun.getDate() - w*7);
+    const days = [];
+    for(let i=0;i<7;i++){
+      const d = new Date(sun); d.setDate(sun.getDate()+i);
+      days.push(d.getTime() <= t.getTime() ? key(d) : null); // 未来の日は null（まだ ない日）
+    }
+    cols.push({ sunLabel:`${sun.getMonth()+1}/${sun.getDate()}`, days });
   }
-  return out;
+  return cols;
 }
 function goalCreatedAt(g){
   const n = Number(String(g.id).replace(/^g/, ''));
   return isNaN(n) ? 0 : n;
 }
-function heatCellsHTML(days, colorFn){
-  return days.map(k=>{
-    const c = colorFn(k);
-    return `<span class="hc" style="background:${c}" title="${dateLabel(k)}"></span>`;
-  }).join('');
+function renderHeatCols(cols, colorFn){
+  return `<div class="heatcols">${cols.map(c=>`
+    <div class="weekcol">
+      <div class="wclabel">${c.sunLabel}</div>
+      ${c.days.map(k=> k
+        ? `<span class="hc" style="background:${colorFn(k)}" title="${dateLabel(k)}"></span>`
+        : `<span class="hc" style="background:transparent"></span>`
+      ).join('')}
+    </div>`).join('')}</div>`;
 }
 function renderStats(){
-  const days = lastNDateKeys(STATS_DAYS);
+  const cols = buildWeekColumns(STATS_WEEKS);
+  const allDays = cols.flatMap(c=>c.days).filter(Boolean);
+  const rangeText = `${cols[0].sunLabel}（にちようび）の週 〜 ${cols[cols.length-1].sunLabel}（にちようび）の週（こんしゅう）`;
 
   // ---- ぜんたい（その日のもくひょうを ぜんぶ できたか） ----
   const overallEl = document.getElementById('statsOverallCard');
   const streak = dailyAllDoneStreak();
   let doneCnt = 0, targetCnt = 0;
-  days.forEach(k=>{
+  allDays.forEach(k=>{
     const st = allDoneOn(k);
     if(st===null) return;
     targetCnt++;
@@ -989,14 +1007,22 @@ function renderStats(){
   });
   const rate = targetCnt>0 ? Math.round(doneCnt/targetCnt*100) : null;
   overallEl.innerHTML = `
-    <b>ぜんぶ できた日（直近${STATS_DAYS}日）</b>
-    <div class="hint" style="margin:6px 0 8px">🟩＝ぜんぶできた日　🟥＝できなかった日　⬜️＝もくひょうを えらばなかった日</div>
-    <div class="heatwrap"><div class="heatgrid">${heatCellsHTML(days, k=>{
+    <b>ぜんぶ できた日（${STATS_WEEKS}週間ぶん）</b>
+    <div class="hint" style="margin:6px 0 2px">1れつ＝1しゅうかん（日ようび〜土ようび）。${esc(rangeText)}</div>
+    <div class="heatlegend">
+      <span class="hc" style="background:var(--accent2)"></span>ぜんぶできた日
+      <span class="hc" style="background:var(--pink)"></span>できなかった日
+      <span class="hc" style="background:#ffd27a"></span>けってい まちの日
+      <span class="hc" style="background:var(--line)"></span>もくひょうを えらばなかった日
+    </div>
+    <div class="heatwrap" style="margin-top:8px">${renderHeatCols(cols, k=>{
       const st = allDoneOn(k);
       if(st===true) return 'var(--accent2)';
-      if(st===false) return 'var(--pink)';
-      return 'var(--line)';
-    })}</div></div>
+      if(st===null) return 'var(--line)';
+      const sel = S.dailySelections[k] || [];
+      if(sel.some(id=>isPendingOn(k,id))) return '#ffd27a';
+      return 'var(--pink)';
+    })}</div>
     <div style="margin-top:10px;font-size:15px">
       🔥 いま <b>${streak}日</b> れんぞく中
       ${rate!==null ? `／ たっせいりつ <b>${rate}%</b>（${doneCnt}/${targetCnt}日）` : ''}
@@ -1013,10 +1039,11 @@ function renderStats(){
     const createdAt = goalCreatedAt(g);
     const gStreak = goalStreak(g);
     let doneD = 0, existD = 0;
-    days.forEach(k=>{
+    allDays.forEach(k=>{
       const [y,m,d] = k.split('-').map(Number);
       const dayStart = new Date(y,m-1,d,0,0,0).getTime();
       if(dayStart < createdAt - 86400000) return; // 作る前の日はカウントしない
+      if(!(S.dailySelections[k]||[]).includes(g.id)) return; // その日 えらんでいなければ カウントしない
       existD++;
       if((S.stamps[k]||[]).some(s=>s.goalId===g.id)) doneD++;
     });
@@ -1028,13 +1055,15 @@ function renderStats(){
         <span class="emo">${g.icon}</span>
         <span class="nm">${esc(g.name)}${gStreak>=2 ? `<span class="streak">🔥${gStreak}日</span>` : ''}</span>
       </div>
-      <div class="heatwrap"><div class="heatgrid">${heatCellsHTML(days, k=>{
+      <div class="heatwrap">${renderHeatCols(cols, k=>{
         const [y,m,d] = k.split('-').map(Number);
         const dayStart = new Date(y,m-1,d,0,0,0).getTime();
         if(dayStart < createdAt - 86400000) return 'transparent';
-        return (S.stamps[k]||[]).some(s=>s.goalId===g.id) ? g.icon && 'var(--accent)' : 'var(--line)';
-      })}</div></div>
-      <div class="gsnum">これまで <b>${totalCnt}</b>こ　／　直近${STATS_DAYS}日で <b>${existD>0 ? Math.round(doneD/existD*100) : 0}%</b> の日に できた（${doneD}/${existD}日）</div>`;
+        if((S.stamps[k]||[]).some(s=>s.goalId===g.id)) return 'var(--accent)';
+        if(isPendingOn(k,g.id)) return '#ffd27a';
+        return 'var(--line)';
+      })}</div>
+      <div class="gsnum">これまで <b>${totalCnt}</b>こ　／　えらんだ日の うち <b>${existD>0 ? Math.round(doneD/existD*100) : 0}%</b> の日に できた（${doneD}/${existD}日）</div>`;
     listEl.appendChild(wrap);
   });
 }
