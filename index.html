@@ -349,6 +349,15 @@ input[type=text],input[type=number],select{
   </div>
 </div>
 
+<!-- ===== けいさん せいかい ほめほめ ===== -->
+<div class="mask" id="praiseModal">
+  <div class="sheet" style="text-align:center">
+    <div class="emo" id="praiseEmo">🌟</div>
+    <div class="hint" id="praiseText" style="font-size:17px;line-height:1.9"></div>
+    <div class="row"><button class="pill" id="praiseOk">やった！</button></div>
+  </div>
+</div>
+
 <!-- ===== スタート→ゴール ===== -->
 <div class="mask" id="raceView">
   <div class="sheet">
@@ -1267,12 +1276,49 @@ function closePinModal(){
   document.getElementById('pinErr').textContent = '';
 }
 document.getElementById('pinCancel').onclick = closePinModal;
+
+/* ---- せいかい したら ほめほめ（ことわざ・えいごも まぜる） ---- */
+const GATE_PRAISE = [
+  'すごい！ 2けたの たしざんが パパッと とけたね！ さすが 1ねんせいだ！',
+  'せいかい！ あたまの なかの そろばん、たいしたものだよ！',
+  'おおきな かずの けいさんを らくらく とくなんて、びっくりしたよ！',
+  'まいにち けいさんの もんだいを といているから、どんどん はやくなってるね！',
+  '「ちりも つもれば やまと なる」って ことわざ、しってる？ ちいさな どりょくを つづけると、おおきな ちからに なるって いみだよ。まいにちの けいさんも、きっと そうだね！',
+  '「けいぞくは ちからなり」って ことばが あるよ。つづけることが ちからに なるって いみ。まいにち もんだいを といてる そうしくん、まさに それだね！',
+  '「いしの うえにも さんねん」って ことわざ しってるかな？ がまん強く つづければ、いつか かならず うまく いくって いみだよ。',
+  '「せいては ことを しそんじる」って ことばが あるよ。あわてず ゆっくり かんがえて とけたのは、すごい ことだよ！',
+  '「ななころび やおき」って いうよ。たとえ まちがえても、また ちょうせんすれば いいんだ。いま せいかい できて えらかったね！',
+  '「せんりの みちも いっぽから」って ことわざ、とおくの ゴールも、いまの いっぽから はじまるって いみだよ。',
+  '英語で すごく あたまが いい ことを "Smart"（スマート）って いうんだよ。今の きみに ぴったりの ことばだね！',
+  '「よく できました」を 英語で言うと "Great job"（グレート ジョブ）だよ。まさに いまの きみに ぴったり！',
+  '英語で びっくりするくらい すごい ことを "Amazing"（アメイジング）って いうよ。今の けいさん、まさに それ！',
+  '英語で てんさいの ことを "Genius"（ジーニアス）って いうんだ。けいさんの はやさ、てんさい みたいだね！'
+];
+let lastGatePraiseIdx = -1;
+function pickGatePraise(){
+  if(GATE_PRAISE.length<=1) return GATE_PRAISE[0];
+  let i;
+  do{ i = Math.floor(Math.random()*GATE_PRAISE.length); } while(i===lastGatePraiseIdx);
+  lastGatePraiseIdx = i;
+  return GATE_PRAISE[i];
+}
+const PRAISE_EMOJIS = ['🌟','✨','🎉','👏','🏆','💪','😊'];
+function showGatePraise(onDone){
+  document.getElementById('praiseEmo').textContent = PRAISE_EMOJIS[Math.floor(Math.random()*PRAISE_EMOJIS.length)];
+  document.getElementById('praiseText').textContent = pickGatePraise();
+  document.getElementById('praiseModal').classList.add('on');
+  document.getElementById('praiseOk').onclick = ()=>{
+    document.getElementById('praiseModal').classList.remove('on');
+    if(onDone) onDone();
+  };
+}
+
 document.getElementById('gateOk').onclick = ()=>{
   const v = document.getElementById('gateInput').value.trim();
   if(Number(v) === gateAnswer){
     const ok = gateOnOk;
     closePinModal();
-    if(ok) ok();
+    showGatePraise(ok);
   }else{
     document.getElementById('pinErr').textContent = 'ちがいます。もういちど。';
     genGateProblem();
