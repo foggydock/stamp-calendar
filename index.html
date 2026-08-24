@@ -721,16 +721,15 @@ function updatePendingBadge(){
 function resolvePending(dateKey, goal, didIt){
   const arr = (S.deferred[dateKey]||[]).filter(id=>id!==goal.id);
   if(arr.length) S.deferred[dateKey] = arr; else delete S.deferred[dateKey];
-  const wasAllDone = allDoneOn(dateKey);
+  let awarded = false;
   if(didIt){
-    (S.stamps[dateKey] = S.stamps[dateKey] || []).push({
-      id:'st'+Date.now()+Math.random(), goalId:goal.id, icon:goal.icon, name:goal.name, ts:Date.now()
-    });
+    awarded = addStamp(dateKey, goal);
+  }else{
+    save();
   }
-  save(); renderToday(); renderCal();
+  renderToday(); renderCal();
   if(didIt){
     confetti();
-    const awarded = celebrateAllDoneIfNeeded(dateKey, wasAllDone);
     if(!awarded) showCeleb(goal.icon, 'スタンプ ゲット！');
   }
 }
@@ -810,9 +809,8 @@ function tapGoal(g){
   const done = todayStamps().some(s=>s.goalId===g.id);
   if(done){
     if(confirm(`「${g.name}」の スタンプを けしますか？`)){
-      S.stamps[today()] = todayStamps().filter(s=>s.goalId!==g.id);
-      if(S.stamps[today()].length===0) delete S.stamps[today()];
-      save(); renderToday();
+      removeStamp(today(), g.id);
+      renderToday();
     }
     return;
   }
@@ -820,16 +818,27 @@ function tapGoal(g){
   else stamp(g);
 }
 
-function stamp(g){
-  const k = today();
-  const wasAllDone = allDoneOn(k);
-  (S.stamps[k] = S.stamps[k] || []).push({
-    id: 'st'+Date.now(), goalId: g.id, icon: g.icon, name: g.name, ts: Date.now()
+// スタンプの書き込み・削除は かならず ここを通す（演出の呼び忘れを ふせぐため）。
+// 戻り値: celebrateAllDoneIfNeeded() の結果（そのまとめ演出を すでに 出したか）
+function addStamp(dateKey, goal){
+  const wasAllDone = allDoneOn(dateKey);
+  (S.stamps[dateKey] = S.stamps[dateKey] || []).push({
+    id: 'st'+Date.now()+Math.random(), goalId: goal.id, icon: goal.icon, name: goal.name, ts: Date.now()
   });
   save();
+  return celebrateAllDoneIfNeeded(dateKey, wasAllDone);
+}
+function removeStamp(dateKey, goalId){
+  const arr = (S.stamps[dateKey] || []).filter(s=>s.goalId!==goalId);
+  if(arr.length) S.stamps[dateKey] = arr; else delete S.stamps[dateKey];
+  save();
+}
+
+function stamp(g){
+  const k = today();
+  const awarded = addStamp(k, g);
   renderToday();
   confetti();
-  const awarded = celebrateAllDoneIfNeeded(k, wasAllDone);
   if(awarded) return;
   const total = totalStamps() - S.spent;
   const need = S.reward.need;
@@ -974,18 +983,8 @@ function renderDayDetail(){
       <span class="nm">${esc(g.name)}</span>
       <span class="chk">${done ? '✅' : '⬜️'}</span>`;
     b.onclick = ()=>{
-      const arr = S.stamps[k] || [];
-      const wasAllDone = allDoneOn(k);
-      if(done){
-        S.stamps[k] = arr.filter(s=>s.goalId!==g.id);
-        if(S.stamps[k].length===0) delete S.stamps[k];
-      }else{
-        (S.stamps[k] = S.stamps[k] || []).push({
-          id:'st'+Date.now()+Math.random(), goalId:g.id, icon:g.icon, name:g.name, ts:Date.now()
-        });
-      }
-      save();
-      if(!done) celebrateAllDoneIfNeeded(k, wasAllDone);
+      if(done) removeStamp(k, g.id);
+      else addStamp(k, g);
       renderDayDetail();
       renderCal();
       if(k===today()) renderToday();
