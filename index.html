@@ -447,7 +447,11 @@ const DEFAULT = {
   dailyReward: { text: '' },  // きょうの もくひょうを ぜんぶ やったら出す ごほうび
   history: [],                // [{text, need, at}]
   spent: 0,                   // ごほうびに使ったスタンプ数
-  yen: 0,                     // 「きょうの もくひょう」を7日れんぞくで達成するたびに+1円のちょきん
+  yen: 0,                     // 「きょうの もくひょう」を7日れんぞくで達成するたびに+1円のちょきん（これまでの合計）
+  yenPaid: 0,                 // このうち、すでに父から現物の1円をもらった分（合計）
+  yenPaidAt: null,            // 最後に「わたした」ときの日付
+  yenPaidMigrated: false,     // yenPaidを追加した際の一度きりの移行処理が済んだか
+  bestStreak: 0,              // これまでの さいちょう れんぞく日数
   lastExport: null,
   v: 1
 };
@@ -473,6 +477,17 @@ function migrateTimerGoals(){
   });
   if(changed) save();
 }
+// yenPaid（わたしずみ の1円）を新設した際、既存の ちょきん(yen) は
+// すでに わたしおわった分として扱い、これ以降だけ新しく「まだ わたしていない」を数える。
+function migrateYenPaidBaseline(){
+  if(S.yenPaidMigrated) return;
+  if(S.yen > 0){
+    S.yenPaid = S.yen;
+    S.yenPaidAt = today();
+  }
+  S.yenPaidMigrated = true;
+  save();
+}
 function save(){
   try{
     localStorage.setItem(KEY, JSON.stringify(S));
@@ -485,6 +500,7 @@ function save(){
 const pad = n => String(n).padStart(2,'0');
 const key = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const today = () => key(new Date());
+migrateYenPaidBaseline(); // today()を使うため const today の定義後に実行する
 const WD = ['にちようび','げつようび','かようび','すいようび','もくようび','きんようび','どようび'];
 function dateLabel(k){
   const [y,m,d] = k.split('-').map(Number);
@@ -607,17 +623,41 @@ function dailyAllDoneStreak(){
 // その日の全達成スタンプ演出（7日れんぞく1円ちょきん／当日リワード）をまとめて処理する。
 // stamp() だけでなく、翌日判定(resolvePending)や過去日編集(renderDayDetail)など
 // スタンプを書き込むすべての経路から呼ぶことで、演出の呼び忘れを防ぐ。
+// れんぞく日数の節目ごとに演出をだんだん豪華にする（絵文字・紙吹雪の量）
+const STREAK_MILESTONES = [
+  {n:3,   emo:'✨',  label:'3日 れんぞく！'},
+  {n:7,   emo:'💰',  label:'7日 れんぞく！'},
+  {n:14,  emo:'🎊',  label:'2週間 れんぞく！'},
+  {n:30,  emo:'🎆',  label:'1か月 れんぞく！すごい！'},
+  {n:60,  emo:'🏅',  label:'2か月 れんぞく！！'},
+  {n:100, emo:'👑',  label:'100日 れんぞく！！！ でんせつ！'},
+  {n:200, emo:'🌟',  label:'200日 れんぞく！！！！'},
+  {n:365, emo:'🏆',  label:'1年 れんぞく！！！！！ すごすぎる！'}
+];
 function celebrateAllDoneIfNeeded(dateKey, wasAllDone){
   const justCompletedAll = !wasAllDone && allDoneOn(dateKey)===true;
   if(!justCompletedAll) return false;
+  const streak = dailyAllDoneStreak();
   let yenAwarded = false;
-  if(dailyAllDoneStreak()%7===0){
+  if(streak%7===0){
     S.yen += 1;
     yenAwarded = true;
-    save();
   }
-  if(yenAwarded){
-    showCeleb('💰', `7日 れんぞくで もくひょう ぜんぶ できた！\n1円 ちょきんが ふえたよ！（ちょきん ${S.yen}円）`);
+  const isNewBest = streak > S.bestStreak;
+  if(isNewBest) S.bestStreak = streak;
+  save();
+
+  const milestone = STREAK_MILESTONES.find(m=>m.n===streak);
+  if(milestone){
+    for(let i=0;i<Math.ceil(milestone.n/30)+1;i++) confetti();
+    let msg = `${milestone.label}\nもくひょう ぜんぶ できたよ！`;
+    if(yenAwarded) msg += `\n1円 ちょきんが ふえたよ！（ちょきん ${S.yen}円）`;
+    if(isNewBest) msg += `\nじぶんの さいこうきろく こうしん！`;
+    showCeleb(milestone.emo, msg);
+  }else if(yenAwarded){
+    let msg = `7日 れんぞくで もくひょう ぜんぶ できた！\n1円 ちょきんが ふえたよ！（ちょきん ${S.yen}円）`;
+    if(isNewBest) msg += `\nじぶんの さいこうきろく こうしん！`;
+    showCeleb('💰', msg);
   }else if(S.dailyReward && S.dailyReward.text){
     const label = dateKey===today() ? 'きょうの' : dateLabel(dateKey)+'の';
     showCeleb('🏆', `${label} もくひょう ぜんぶ できた！\n${S.dailyReward.text}`);
@@ -1118,10 +1158,19 @@ function renderReward(){
   const yEl = document.getElementById('yenCard');
   const streak = dailyAllDoneStreak();
   const toNext = streak%7===0 ? 7 : 7 - (streak%7);
+  const unpaid = S.yen - S.yenPaid;
+  const paidAtLabel = S.yenPaidAt ? dateLabel(S.yenPaidAt) : null;
   yEl.innerHTML = `
     <div class="hint">きょうの もくひょう ぜんぶを 7日 れんぞくで たっせいすると +1円</div>
-    <div class="big">💰 ちょきん ${S.yen}円</div>
-    <div style="font-size:14px;margin-top:6px">いま ${streak}日 れんぞく中（あと ${toNext}日で +1円）</div>`;
+    <div class="big">💰 ちょきん ぜんぶで ${S.yen}円</div>
+    <div style="font-size:14px;margin-top:6px">いま ${streak}日 れんぞく中（あと ${toNext}日で +1円）　／　さいこう ${S.bestStreak}日</div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+      <div style="font-size:15px">🧧 父から まだ もらっていない：<b style="font-size:19px">${unpaid}円</b></div>
+      <div class="hint" style="margin-top:4px">${paidAtLabel ? `${paidAtLabel} に わたしずみ（${S.yenPaid}円ぶん）` : 'まだ わたした きろくが ありません'}</div>
+      ${unpaid>0 ? `<button class="pill ghost" id="yenPaidBtn" style="margin-top:10px;font-size:15px;padding:10px 16px">おとな用：きょう わたした</button>` : ''}
+    </div>`;
+  const payBtn = document.getElementById('yenPaidBtn');
+  if(payBtn) payBtn.onclick = ()=> requirePin(()=> markYenPaid());
 
   const dEl = document.getElementById('dailyRewardCard');
   if(S.dailyReward && S.dailyReward.text){
@@ -1343,6 +1392,13 @@ document.getElementById('rSave').onclick = ()=>{
   save(); renderReward();
   alert('ほぞんしました');
 };
+function markYenPaid(){
+  S.yenPaid = S.yen;
+  S.yenPaidAt = today();
+  save();
+  renderReward();
+  alert(`きろくしました。きょうから また あたらしく ちょきんが スタートするよ！`);
+}
 document.getElementById('dSave').onclick = ()=>{
   S.dailyReward = { text: document.getElementById('dText').value.trim() };
   save(); renderReward();
