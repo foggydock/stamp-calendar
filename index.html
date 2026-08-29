@@ -391,12 +391,16 @@ input[type=text],input[type=number],select{
 
     <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
 
-    <b>ごほうびの せってい</b>
-    <label>スタンプ 何個で ごほうび？</label>
-    <input type="number" id="rNeed" min="1" max="200">
-    <label>ごほうびの ないよう</label>
+    <b>ごほうびショップの せってい</b>
+    <p class="hint">スタンプが たまったら こうかんできる しなものを いくつでも つくれます。</p>
+    <div id="rewardShopList" style="margin:10px 0"></div>
+    <label>アイコン（絵文字）</label>
+    <input type="text" id="rIcon" placeholder="🎁" maxlength="4" value="🎁">
+    <label>スタンプ 何個で こうかん？</label>
+    <input type="number" id="rNeed" min="1" max="200" value="10">
+    <label>しなものの ないよう</label>
     <input type="text" id="rText" placeholder="アイスを たべる" maxlength="30">
-    <div class="row"><button class="pill" id="rSave">ごほうびを ほぞん</button></div>
+    <div class="row"><button class="pill" id="rSave">しなものを ついか</button></div>
 
     <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
 
@@ -444,6 +448,8 @@ const DEFAULT = {
   dailySelections: {},        // "2026-08-08": [goalId, ...]  ← その日「きょう」に出すもくひょう。日が変わると自動で空になる
   deferred: {},                // "2026-08-08": [goalId, ...]  ← その日は「あした きめる」にした もくひょう。あした PINなしで けっていできる
   reward: { need: 10, text: '' },
+  rewards: [],                // ごほうびショップ [{id, icon, text, need}]
+  rewardsMigrated: false,     // 旧単一ごほうび(reward)をrewardsへ移行済みか
   dailyReward: { text: '' },  // きょうの もくひょうを ぜんぶ やったら出す ごほうび
   history: [],                // [{text, need, at}]
   spent: 0,                   // ごほうびに使ったスタンプ数
@@ -458,6 +464,7 @@ const DEFAULT = {
 
 let S = load();
 migrateTimerGoals();
+migrateRewardsBaseline();
 
 function load(){
   try{
@@ -494,6 +501,15 @@ function save(){
   }catch(e){
     alert('ほぞんに しっぱいしました。おとなのひとに つたえてください。\n' + e.message);
   }
+}
+// 旧・単一ごほうび(reward)をrewardsショップの1件目として一度だけ引き継ぐ
+function migrateRewardsBaseline(){
+  if(S.rewardsMigrated) return;
+  if(S.reward && S.reward.text && S.rewards.length===0){
+    S.rewards.push({ id:'rw'+Date.now(), icon:'🎁', text: S.reward.text, need: S.reward.need });
+  }
+  S.rewardsMigrated = true;
+  save();
 }
 
 /* ============ 日付 ============ */
@@ -1190,24 +1206,30 @@ function renderReward(){
   }
 
   const el = document.getElementById('rewardCard');
-  const need = S.reward.need, have = totalStamps() - S.spent;
-  if(!S.reward.text){
-    el.innerHTML = `<div class="empty">ごほうびが まだ きまっていません。<br>
+  const have = totalStamps() - S.spent;
+  if(!S.rewards.length){
+    el.innerHTML = `<div class="empty">ごほうびショップに まだ しなものが ありません。<br>
       みぎうえの ⚙️ から おとなのひとに きめてもらおう。</div>`;
   }else{
-    const pct = Math.min(100, Math.round(have/need*100));
-    const ok = have >= need;
-    el.innerHTML = `
-      <div class="hint">いまの ごほうび</div>
-      <div class="big">🎁 ${esc(S.reward.text)}</div>
-      <div class="bar"><i style="width:${pct}%"></i></div>
-      <div style="font-size:20px">スタンプ <b>${have}</b> / ${need} こ</div>
-      <div class="row">
-        <button class="pill" id="claim" ${ok?'':'disabled'}>
-          ${ok ? 'ごほうびを もらった！' : `あと ${need-have} こ`}
-        </button>
-      </div>`;
-    if(ok) document.getElementById('claim').onclick = claim;
+    el.innerHTML = `<div class="hint" style="margin-bottom:10px">🛍️ ごほうびショップ（いま スタンプ ${have}こ もってる）</div>` +
+      S.rewards.map(r=>{
+        const pct = Math.min(100, Math.round(have/r.need*100));
+        const ok = have >= r.need;
+        return `
+        <div class="shopItem" style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--line)">
+          <div class="big">${r.icon} ${esc(r.text)}</div>
+          <div class="bar"><i style="width:${pct}%"></i></div>
+          <div style="font-size:18px">スタンプ <b>${have}</b> / ${r.need} こ</div>
+          <div class="row">
+            <button class="pill buyBtn" data-id="${r.id}" ${ok?'':'disabled'}>
+              ${ok ? 'こうかんする！' : `あと ${r.need-have} こ`}
+            </button>
+          </div>
+        </div>`;
+      }).join('');
+    el.querySelectorAll('.buyBtn').forEach(b=>{
+      b.onclick = ()=> buyReward(b.dataset.id);
+    });
   }
   const h = document.getElementById('rewardHistory');
   h.innerHTML = S.history.length
@@ -1216,12 +1238,14 @@ function renderReward(){
          <span class="nm">${esc(x.text)}<span class="meta" style="display:block;font-size:13px;color:var(--sub)">${x.at}</span></span></div>`).join('')
     : '<div class="hint">まだ ありません</div>';
 }
-function claim(){
-  if(!confirm(`「${S.reward.text}」を もらいましたか？\nスタンプ ${S.reward.need}こを つかいます。`)) return;
-  S.spent += S.reward.need;
-  S.history.push({ text: S.reward.text, need: S.reward.need, at: today() });
+function buyReward(id){
+  const r = S.rewards.find(x=>x.id===id);
+  if(!r) return;
+  if(!confirm(`「${r.text}」を もらいましたか？\nスタンプ ${r.need}こを つかいます。`)) return;
+  S.spent += r.need;
+  S.history.push({ text: r.text, need: r.need, at: today() });
   save();
-  confetti(); showCeleb('🎁', 'おめでとう！');
+  confetti(); showCeleb(r.icon, 'おめでとう！');
   renderReward();
 }
 
@@ -1299,15 +1323,37 @@ document.getElementById('gDelete').onclick = ()=>{
 /* ============ おとなメニュー ============ */
 document.getElementById('btnAdult').onclick = ()=>{
   requirePin(()=>{
-    document.getElementById('rNeed').value = S.reward.need;
-    document.getElementById('rText').value = S.reward.text;
+    document.getElementById('rIcon').value = '🎁';
+    document.getElementById('rNeed').value = 10;
+    document.getElementById('rText').value = '';
     document.getElementById('dText').value = S.dailyReward ? S.dailyReward.text : '';
+    renderRewardShopList();
     renderAdultGoals();
     renderBackupWarn();
     renderSnapshotList();
     document.getElementById('adult').classList.add('on');
   });
 };
+function renderRewardShopList(){
+  const el = document.getElementById('rewardShopList');
+  el.innerHTML = S.rewards.length ? '' : '<div class="hint">まだ しなものが ありません</div>';
+  S.rewards.forEach(r=>{
+    const d = document.createElement('div');
+    d.className = 'listitem';
+    d.innerHTML = `<span class="emo">${r.icon}</span><span class="nm">${esc(r.text)}<span class="meta" style="display:block;font-size:13px;color:var(--sub)">スタンプ ${r.need}こ</span></span>`;
+    const b = document.createElement('button');
+    b.className='mini'; b.textContent='けす';
+    b.onclick = ()=>{
+      if(!confirm(`「${r.text}」を けしますか？`)) return;
+      S.rewards = S.rewards.filter(x=>x.id!==r.id);
+      save();
+      renderRewardShopList();
+      renderReward();
+    };
+    d.appendChild(b);
+    el.appendChild(d);
+  });
+}
 
 /* ---- おとなのひと ロック（たしざんの もんだい） ---- */
 let gateOnOk = null, gateAnswer = 0;
@@ -1388,9 +1434,17 @@ document.getElementById('adultClose').onclick = ()=> document.getElementById('ad
 document.getElementById('rSave').onclick = ()=>{
   const n = parseInt(document.getElementById('rNeed').value,10);
   if(!n || n<1){ alert('スタンプの数を入れてください'); return; }
-  S.reward = { need:n, text: document.getElementById('rText').value.trim() };
-  save(); renderReward();
-  alert('ほぞんしました');
+  const text = document.getElementById('rText').value.trim();
+  if(!text){ alert('しなものの ないようを 入れてください'); return; }
+  const icon = document.getElementById('rIcon').value.trim() || '🎁';
+  S.rewards.push({ id:'rw'+Date.now(), icon, text, need:n });
+  save();
+  document.getElementById('rIcon').value = '🎁';
+  document.getElementById('rNeed').value = 10;
+  document.getElementById('rText').value = '';
+  renderRewardShopList();
+  renderReward();
+  alert('ついかしました');
 };
 function markYenPaid(){
   S.yenPaid = S.yen;
