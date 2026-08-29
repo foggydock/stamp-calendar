@@ -219,6 +219,31 @@ input[type=text],input[type=number],select{
 }
 @keyframes encourageBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 
+/* ---- しょうごう トースト ---- */
+#badgeToast{
+  position:fixed; left:50%; top:calc(env(safe-area-inset-top) + 10px);
+  transform:translate(-50%,-140%); z-index:70; max-width:min(86vw, 320px);
+  display:flex; align-items:center; gap:8px; pointer-events:none;
+  background:linear-gradient(160deg,#fff3d6,#ffe0e6); border:3px solid var(--accent);
+  border-radius:18px; padding:10px 16px; box-shadow:var(--shadow);
+  opacity:0; transition:opacity .3s ease, transform .3s ease;
+}
+#badgeToast.on{opacity:1; transform:translate(-50%,0)}
+#badgeToast .face{font-size:30px; flex:none}
+#badgeToast .bubble{font-size:14px; font-weight:bold; line-height:1.5; white-space:pre-line}
+
+/* ---- しょうごう コレクション ---- */
+.badgegrid{display:grid; grid-template-columns:repeat(auto-fill, minmax(96px,1fr)); gap:10px}
+.badgebox{
+  text-align:center; padding:10px 6px; border-radius:14px; background:#f6f1e7;
+  border:2px solid var(--line); opacity:.6;
+}
+.badgebox.got{opacity:1; background:#fff6ea; border-color:var(--accent)}
+.badgebox .bico{font-size:30px}
+.badgebox .blabel{font-size:12px; color:var(--sub); margin-top:2px; line-height:1.4}
+.badgebox .bnum{font-size:14px; font-weight:bold; margin-top:2px}
+.badgebox .bnext{font-size:11px; color:var(--sub); margin-top:2px}
+
 .hint{font-size:14px; color:var(--sub); line-height:1.7}
 .listitem{display:flex; align-items:center; gap:10px; padding:12px 0; border-bottom:1px solid var(--line)}
 .listitem .emo{font-size:28px}
@@ -258,6 +283,7 @@ input[type=text],input[type=number],select{
 
   <!-- ========== せいせき ========== -->
   <section class="view" id="v-stats">
+    <div class="card" id="badgeCard"></div>
     <div class="card" id="statsOverallCard"></div>
     <div class="card">
       <b>もくひょうごとの きろく</b>
@@ -278,6 +304,7 @@ input[type=text],input[type=number],select{
 </main>
 
 <div id="encourage"></div>
+<div id="badgeToast"></div>
 
 <nav>
   <button class="on" data-v="today"><span style="position:relative;display:inline-block">⭐️<b id="pendingBadge" class="navbadge" style="display:none"></b></span>きょう</button>
@@ -458,6 +485,7 @@ const DEFAULT = {
   yenPaidAt: null,            // 最後に「わたした」ときの日付
   yenPaidMigrated: false,     // yenPaidを追加した際の一度きりの移行処理が済んだか
   bestStreak: 0,              // これまでの さいちょう れんぞく日数
+  badgesSeen: {},             // しょうごう：カテゴリごとに すでに とどけた段階(tier)の番号
   lastExport: null,
   v: 1
 };
@@ -662,6 +690,7 @@ function celebrateAllDoneIfNeeded(dateKey, wasAllDone){
   const isNewBest = streak > S.bestStreak;
   if(isNewBest) S.bestStreak = streak;
   save();
+  checkBadges();
 
   const milestone = STREAK_MILESTONES.find(m=>m.n===streak);
   if(milestone){
@@ -679,6 +708,64 @@ function celebrateAllDoneIfNeeded(dateKey, wasAllDone){
     showCeleb('🏆', `${label} もくひょう ぜんぶ できた！\n${S.dailyReward.text}`);
   }
   return true;
+}
+
+/* ============ しょうごう（バッジコレクション） ============ */
+const BADGE_DEFS = [
+  { key:'stamps', icon:'⭐️', label:'スタンプ ごうけい', unit:'こ', thresholds:[1,10,50,100,300,500,1000], value:()=>totalStamps() },
+  { key:'streak', icon:'🔥', label:'さいちょう れんぞく', unit:'日', thresholds:[3,7,14,30,60,100,200,365], value:()=>S.bestStreak },
+  { key:'rewards', icon:'🎁', label:'ごほうび こうかん', unit:'かい', thresholds:[1,3,5,10,20], value:()=>S.history.length }
+];
+function badgeTier(def){
+  const v = def.value();
+  let tier = 0;
+  def.thresholds.forEach((t,i)=>{ if(v>=t) tier = i+1; });
+  return tier;
+}
+function checkBadges(){
+  let changed = false;
+  BADGE_DEFS.forEach(def=>{
+    const tier = badgeTier(def);
+    const seen = S.badgesSeen[def.key] || 0;
+    if(tier > seen){
+      S.badgesSeen[def.key] = tier;
+      changed = true;
+      showBadgeToast(def.icon, `しょうごう かくとく！\n${def.label} ${def.thresholds[tier-1]}${def.unit}`);
+    }
+  });
+  if(changed) save();
+}
+let badgeToastTimer = null;
+function showBadgeToast(icon, msg){
+  const el = document.getElementById('badgeToast');
+  if(!el) return;
+  el.innerHTML = `<span class="face">${icon}</span><span class="bubble">${esc(msg)}</span>`;
+  el.classList.remove('on');
+  void el.offsetWidth;
+  el.classList.add('on');
+  clearTimeout(badgeToastTimer);
+  badgeToastTimer = setTimeout(()=> el.classList.remove('on'), 3200);
+}
+function renderBadges(){
+  const el = document.getElementById('badgeCard');
+  if(!el) return;
+  el.innerHTML = '<b>しょうごう コレクション</b><div class="badgegrid" style="margin-top:10px"></div>';
+  const grid = el.querySelector('.badgegrid');
+  BADGE_DEFS.forEach(def=>{
+    const tier = badgeTier(def);
+    const got = tier > 0;
+    const cur = got ? def.thresholds[tier-1] : 0;
+    const next = def.thresholds[tier];
+    const box = document.createElement('div');
+    box.className = 'badgebox' + (got ? ' got' : '');
+    box.innerHTML = `
+      <div class="bico">${got ? def.icon : '🔒'}</div>
+      <div class="blabel">${esc(def.label)}</div>
+      <div class="bnum">${got ? `${cur}${def.unit}` : 'まだ ない'}</div>
+      ${next!==undefined ? `<div class="bnext">つぎ：${next}${def.unit}</div>` : (got ? `<div class="bnext">コンプリート！</div>` : '')}
+    `;
+    grid.appendChild(box);
+  });
 }
 
 function renderToday(){
@@ -882,6 +969,7 @@ function addStamp(dateKey, goal){
     id: 'st'+Date.now()+Math.random(), goalId: goal.id, icon: goal.icon, name: goal.name, ts: Date.now()
   });
   save();
+  checkBadges();
   return celebrateAllDoneIfNeeded(dateKey, wasAllDone);
 }
 function removeStamp(dateKey, goalId){
@@ -1092,6 +1180,7 @@ function renderHeatCols(cols, colorFn){
   return `<div class="heatrows">${head}${rows}</div>`;
 }
 function renderStats(){
+  renderBadges();
   const cols = buildWeekColumns(STATS_WEEKS);
   const allDays = cols.flatMap(c=>c.days).filter(Boolean);
   const rangeText = `${cols[0].sunLabel}（にちようび）の週 〜 ${cols[cols.length-1].sunLabel}（にちようび）の週（こんしゅう）`;
@@ -1245,6 +1334,7 @@ function buyReward(id){
   S.spent += r.need;
   S.history.push({ text: r.text, need: r.need, at: today() });
   save();
+  checkBadges();
   confetti(); showCeleb(r.icon, 'おめでとう！');
   renderReward();
 }
