@@ -576,6 +576,20 @@ const ENCOURAGE_MESSAGES = [
   '１かい やるたびに、そうしくんの レベルは かならず １あがってるよ！',
   'まいにちの がんばり、しっかり みてるよ！'
 ];
+/* ============ ときどき でる レアサプライズ ============ */
+const RARE_SURPRISE_CHANCE = 1/8; // スタンプ1こごとの あたる かくりつ
+const RARE_SURPRISES = [
+  { icon:'🌈', msg:'レア！ にじが でたよ！\nすごい ラッキー！' },
+  { icon:'👑', msg:'レア！ おうさま スタンプ！\nそうしくん さいこう！' },
+  { icon:'💎', msg:'レア！ ダイヤモンド スタンプ！\nピカピカ かがやいてる！' },
+  { icon:'🎉', msg:'レア！ おおどんでん スタンプ！\nおめでとう！' },
+  { icon:'🍀', msg:'レア！ よつばの クローバー！\nいいこと ありそう！' },
+  { icon:'🚀', msg:'レア！ ロケット スタンプ！\nテンション ぶっとび！' }
+];
+function rollRareSurprise(){
+  if(Math.random() >= RARE_SURPRISE_CHANCE) return null;
+  return RARE_SURPRISES[Math.floor(Math.random()*RARE_SURPRISES.length)];
+}
 let lastEncourageMsg = null;
 function pickEncourageMessage(){
   if(ENCOURAGE_MESSAGES.length<=1) return ENCOURAGE_MESSAGES[0];
@@ -989,7 +1003,13 @@ function stamp(g){
   if(S.reward.text && need>0 && total>0 && total % need === 0){
     showCeleb('🎁', `スタンプ ${need}こ たまった！\n${S.reward.text}`);
   }else{
-    showCeleb(g.icon, 'スタンプ ゲット！');
+    const rare = rollRareSurprise();
+    if(rare){
+      confetti();
+      showCeleb(rare.icon, rare.msg);
+    }else{
+      showCeleb(g.icon, 'スタンプ ゲット！');
+    }
   }
 }
 
