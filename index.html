@@ -255,6 +255,7 @@ input[type=text],input[type=number],select{
 
 <header>
   <h1 id="title">きょうの もくひょう</h1>
+  <button class="iconbtn" id="btnSound" aria-label="おと">🔊</button>
   <button class="iconbtn" id="btnAdult" aria-label="おとなのひと">⚙️</button>
 </header>
 
@@ -488,6 +489,7 @@ const DEFAULT = {
   bestStreak: 0,              // これまでの さいちょう れんぞく日数
   badgesSeen: {},             // しょうごう：カテゴリごとに すでに とどけた段階(tier)の番号
   mascotSeen: 0,               // そだつマスコット：すでに とどけた段階(tier)の番号
+  soundOn: true,               // 効果音を鳴らすか
   lastExport: null,
   v: 1
 };
@@ -532,6 +534,68 @@ function save(){
     alert('ほぞんに しっぱいしました。おとなのひとに つたえてください。\n' + e.message);
   }
 }
+
+/* ============ こうかおん ============ */
+// Web Audio APIで小さな電子音を鳴らす。ファイル不要・オフラインでも動く。
+let audioCtx = null;
+function getAudioCtx(){
+  if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+function playTone(freq, startAt, dur, type='sine', gainPeak=0.18){
+  const ctx = getAudioCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0, startAt);
+  gain.gain.linearRampToValueAtTime(gainPeak, startAt + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(startAt);
+  osc.stop(startAt + dur + 0.02);
+}
+function playPop(){
+  if(!S.soundOn) return;
+  try{
+    const ctx = getAudioCtx(); const t = ctx.currentTime;
+    playTone(660, t, 0.12, 'triangle');
+    playTone(880, t + 0.06, 0.14, 'triangle');
+  }catch(e){ /* オーディオが使えない環境は無視してよい */ }
+}
+function playChime(){
+  if(!S.soundOn) return;
+  try{
+    const ctx = getAudioCtx(); const t = ctx.currentTime;
+    [523,659,784].forEach((f,i)=> playTone(f, t + i*0.09, 0.22, 'sine', 0.16));
+  }catch(e){ /* 無視してよい */ }
+}
+function playFanfare(){
+  if(!S.soundOn) return;
+  try{
+    const ctx = getAudioCtx(); const t = ctx.currentTime;
+    [523,659,784,1047].forEach((f,i)=> playTone(f, t + i*0.1, 0.28, 'square', 0.14));
+  }catch(e){ /* 無視してよい */ }
+}
+function playSparkle(){
+  if(!S.soundOn) return;
+  try{
+    const ctx = getAudioCtx(); const t = ctx.currentTime;
+    [784,988,1175,1568,1319].forEach((f,i)=> playTone(f, t + i*0.06, 0.16, 'triangle', 0.13));
+  }catch(e){ /* 無視してよい */ }
+}
+function updateSoundBtn(){
+  const b = document.getElementById('btnSound');
+  if(b) b.textContent = S.soundOn ? '🔊' : '🔇';
+}
+document.getElementById('btnSound').onclick = ()=>{
+  S.soundOn = !S.soundOn;
+  save();
+  updateSoundBtn();
+  if(S.soundOn) playPop();
+};
+updateSoundBtn();
 // 旧・単一ごほうび(reward)をrewardsショップの1件目として一度だけ引き継ぐ
 function migrateRewardsBaseline(){
   if(S.rewardsMigrated) return;
@@ -711,15 +775,18 @@ function celebrateAllDoneIfNeeded(dateKey, wasAllDone){
   const milestone = STREAK_MILESTONES.find(m=>m.n===streak);
   if(milestone){
     for(let i=0;i<Math.ceil(milestone.n/30)+1;i++) confetti();
+    playFanfare();
     let msg = `${milestone.label}\nもくひょう ぜんぶ できたよ！`;
     if(yenAwarded) msg += `\n1円 ちょきんが ふえたよ！（ちょきん ${S.yen}円）`;
     if(isNewBest) msg += `\nじぶんの さいこうきろく こうしん！`;
     showCeleb(milestone.emo, msg);
   }else if(yenAwarded){
+    playFanfare();
     let msg = `7日 れんぞくで もくひょう ぜんぶ できた！\n1円 ちょきんが ふえたよ！（ちょきん ${S.yen}円）`;
     if(isNewBest) msg += `\nじぶんの さいこうきろく こうしん！`;
     showCeleb('💰', msg);
   }else if(S.dailyReward && S.dailyReward.text){
+    playFanfare();
     const label = dateKey===today() ? 'きょうの' : dateLabel(dateKey)+'の';
     showCeleb('🏆', `${label} もくひょう ぜんぶ できた！\n${S.dailyReward.text}`);
   }
@@ -796,6 +863,7 @@ function checkBadges(){
 }
 let badgeToastTimer = null;
 function showBadgeToast(icon, msg){
+  playChime();
   const el = document.getElementById('badgeToast');
   if(!el) return;
   el.innerHTML = `<span class="face">${icon}</span><span class="bubble">${esc(msg)}</span>`;
@@ -1044,15 +1112,18 @@ function stamp(g){
   const awarded = addStamp(k, g);
   renderToday();
   confetti();
+  playPop();
   if(awarded) return;
   const total = totalStamps() - S.spent;
   const need = S.reward.need;
   if(S.reward.text && need>0 && total>0 && total % need === 0){
+    playFanfare();
     showCeleb('🎁', `スタンプ ${need}こ たまった！\n${S.reward.text}`);
   }else{
     const rare = rollRareSurprise();
     if(rare){
       confetti();
+      playSparkle();
       showCeleb(rare.icon, rare.msg);
     }else{
       showCeleb(g.icon, 'スタンプ ゲット！');
@@ -1402,7 +1473,7 @@ function buyReward(id){
   S.history.push({ text: r.text, need: r.need, at: today() });
   save();
   checkBadges();
-  confetti(); showCeleb(r.icon, 'おめでとう！');
+  confetti(); playFanfare(); showCeleb(r.icon, 'おめでとう！');
   renderReward();
 }
 
