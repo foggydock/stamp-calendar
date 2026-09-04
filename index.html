@@ -262,6 +262,7 @@ input[type=text],input[type=number],select{
   <!-- ========== きょう ========== -->
   <section class="view on" id="v-today">
     <div class="datebar" id="dateBar"></div>
+    <div class="goal" id="mascotCard" style="cursor:default"></div>
     <div id="backupBanner"></div>
     <div id="pendingReview"></div>
     <div id="goalList"></div>
@@ -486,6 +487,7 @@ const DEFAULT = {
   yenPaidMigrated: false,     // yenPaidを追加した際の一度きりの移行処理が済んだか
   bestStreak: 0,              // これまでの さいちょう れんぞく日数
   badgesSeen: {},             // しょうごう：カテゴリごとに すでに とどけた段階(tier)の番号
+  mascotSeen: 0,               // そだつマスコット：すでに とどけた段階(tier)の番号
   lastExport: null,
   v: 1
 };
@@ -724,6 +726,49 @@ function celebrateAllDoneIfNeeded(dateKey, wasAllDone){
   return true;
 }
 
+/* ============ そだつマスコット ============ */
+// スタンプの ごうけい数で そだつ、じぶんだけの あいぼう。tier=0 は たまご。
+const MASCOT_STAGES = [
+  { need:0,    icon:'🥚',   label:'たまご' },
+  { need:1,    icon:'🐣',   label:'たまごが われた！' },
+  { need:10,   icon:'🦎',   label:'ちいさな とかげ' },
+  { need:50,   icon:'🐲',   label:'ちいさな ドラゴン' },
+  { need:100,  icon:'🐉',   label:'ドラゴン' },
+  { need:300,  icon:'🔥🐉', label:'ほのおの ドラゴン' },
+  { need:500,  icon:'🌟🐉', label:'ひかる ドラゴン' },
+  { need:1000, icon:'👑🐉', label:'でんせつの ドラゴン' }
+];
+function mascotTier(){
+  const total = totalStamps();
+  let tier = 0;
+  MASCOT_STAGES.forEach((s,i)=>{ if(total>=s.need) tier = i; });
+  return tier;
+}
+function checkMascotGrowth(){
+  const tier = mascotTier();
+  if(tier <= S.mascotSeen) return;
+  S.mascotSeen = tier;
+  save();
+  const stage = MASCOT_STAGES[tier];
+  showBadgeToast(stage.icon, `マスコットが せいちょうした！\n${stage.label} に なったよ！`);
+}
+function renderMascotCard(){
+  const el = document.getElementById('mascotCard');
+  if(!el) return;
+  const tier = mascotTier();
+  const stage = MASCOT_STAGES[tier];
+  const next = MASCOT_STAGES[tier+1];
+  const total = totalStamps();
+  el.innerHTML = `
+    <span class="emo" style="font-size:40px;line-height:1">${stage.icon}</span>
+    <span class="nm" style="flex:1">
+      <b>${esc(stage.label)}</b>
+      <span class="meta" style="display:block;margin-top:2px">
+        ${next ? `つぎまで あと ${next.need-total}こ` : 'さいだいまで そだった！'}
+      </span>
+    </span>`;
+}
+
 /* ============ しょうごう（バッジコレクション） ============ */
 const BADGE_DEFS = [
   { key:'stamps', icon:'⭐️', label:'スタンプ ごうけい', unit:'こ', thresholds:[1,10,50,100,300,500,1000], value:()=>totalStamps() },
@@ -787,6 +832,7 @@ function renderToday(){
   document.getElementById('dateBar').innerHTML =
     `${d.getMonth()+1}がつ ${d.getDate()}にち<small>${WD[d.getDay()]}</small>`;
 
+  renderMascotCard();
   renderPendingReview();
   updatePendingBadge();
   renderBackupBanner();
@@ -984,6 +1030,7 @@ function addStamp(dateKey, goal){
   });
   save();
   checkBadges();
+  checkMascotGrowth();
   return celebrateAllDoneIfNeeded(dateKey, wasAllDone);
 }
 function removeStamp(dateKey, goalId){
