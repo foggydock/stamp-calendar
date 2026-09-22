@@ -66,7 +66,6 @@ main{padding:0 16px}
 }
 .deferbtn.on{background:#e0ac2b; border-color:#b8860b; color:#fff; font-weight:bold; box-shadow:var(--shadow)}
 .pendrow{padding:10px 0; border-top:1px solid #f0d9a8}
-.pendrow:first-of-type{border-top:none}
 .pendbtn{
   flex:1; border:2px solid var(--line); background:#fff; border-radius:12px;
   padding:10px 8px; font-family:inherit; font-size:15px; font-weight:bold; color:var(--sub); cursor:pointer;
@@ -329,7 +328,7 @@ input[type=text],input[type=number],select{
       <button data-t="race">スタート→ゴール</button>
     </div>
     <p class="hint" id="typeExplainHint"></p>
-    <div id="minWrap" style="display:none">
+    <div id="minWrap">
       <label id="gMinLabel">なんぷん？</label>
       <input type="number" id="gMin" value="10" min="1" max="120">
     </div>
@@ -473,7 +472,7 @@ const EMOJIS = ['⭐️','🦖','🍰','⚽️','🚀','🐶','🐱','🌈','�
 
 const DEFAULT = {
   goals: [],
-  stamps: {},                 // "2026-08-08": [{id, goalId, icon, name, ts}]
+  stamps: {},                 // "2026-08-08": [{goalId, icon}]
   dailySelections: {},        // "2026-08-08": [goalId, ...]  ← その日「きょう」に出すもくひょう。日が変わると自動で空になる
   deferred: {},                // "2026-08-08": [goalId, ...]  ← その日は「あした きめる」にした もくひょう。あした PINなしで けっていできる
   reward: { need: 10, text: '' },
@@ -483,6 +482,8 @@ const DEFAULT = {
   history: [],                // [{text, need, at}]
   spent: 0,                   // ごほうびに使ったスタンプ数
   yen: 0,                     // 「きょうの もくひょう」を7日れんぞくで達成するたびに+1円のちょきん（これまでの合計）
+  yenStreakHigh: 0,           // これまでに ちょきんを 計算ずみの さいだい れんぞく日数（同じ日数へのもどりで二重に加算しないため）
+  yenStreakHighMigrated: false, // yenStreakHighを追加した際の一度きりの移行処理が済んだか
   yenPaid: 0,                 // このうち、すでに父から現物の1円をもらった分（合計）
   yenPaidAt: null,            // 最後に「わたした」ときの日付
   yenPaidMigrated: false,     // yenPaidを追加した際の一度きりの移行処理が済んだか
@@ -490,8 +491,7 @@ const DEFAULT = {
   badgesSeen: {},             // しょうごう：カテゴリごとに すでに とどけた段階(tier)の番号
   mascotSeen: 0,               // そだつマスコット：すでに とどけた段階(tier)の番号
   soundOn: true,               // 効果音を鳴らすか
-  lastExport: null,
-  v: 1
+  lastExport: null
 };
 
 let S = load();
@@ -504,7 +504,12 @@ function load(){
     if(!raw) return structuredClone(DEFAULT);
     return Object.assign(structuredClone(DEFAULT), JSON.parse(raw));
   }catch(e){
-    alert('きろくの よみこみに しっぱいしました: ' + e.message);
+    // 壊れた元データを 別キーに 退避してから きれいな状態で 起動する（上書きで 消さないため）
+    try{
+      const raw = localStorage.getItem(KEY);
+      if(raw) localStorage.setItem(KEY + '_corrupt_' + Date.now(), raw);
+    }catch(e2){ /* 退避できなくても 続行する */ }
+    alert('きろくの よみこみに しっぱいしました: ' + e.message + '\n元のデータは べつの場所に のこしてあります。おとなのひとに つたえてください。');
     return structuredClone(DEFAULT);
   }
 }
@@ -525,6 +530,16 @@ function migrateYenPaidBaseline(){
     S.yenPaidAt = today();
   }
   S.yenPaidMigrated = true;
+  save();
+}
+// yenStreakHigh（ちょきんの 二重加算ふせぎ）を新設した際、既存の ちょきん(yen) の ぶんだけ
+// すでに 計算ずみと みなし、これ以降の れんぞくの のびぶんだけ 新しく 加算する。
+function migrateYenStreakHighBaseline(){
+  if(S.yenStreakHighMigrated) return;
+  if(S.yen > 0 && S.yenStreakHigh < S.yen*7){
+    S.yenStreakHigh = S.yen*7;
+  }
+  S.yenStreakHighMigrated = true;
   save();
 }
 function save(){
@@ -611,6 +626,7 @@ const pad = n => String(n).padStart(2,'0');
 const key = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const today = () => key(new Date());
 migrateYenPaidBaseline(); // today()を使うため const today の定義後に実行する
+migrateYenStreakHighBaseline();
 const WD = ['にちようび','げつようび','かようび','すいようび','もくようび','きんようび','どようび'];
 function dateLabel(k){
   const [y,m,d] = k.split('-').map(Number);
@@ -763,9 +779,16 @@ function celebrateAllDoneIfNeeded(dateKey, wasAllDone){
   if(!justCompletedAll) return false;
   const streak = dailyAllDoneStreak();
   let yenAwarded = false;
-  if(streak%7===0){
-    S.yen += 1;
-    yenAwarded = true;
+  // streak の「これまでの さいだい」を こえた ぶんだけ 7日ごとに 1円を 加算する。
+  // こうすることで、同じ日に スタンプを 消して 押しなおしても（streakが 同じ値に もどるだけなら）二重に 加算されず、
+  // 「あした きめる」の 後決めなどで streak が 一気に のびた ときも、とびこした 7の 倍数ぶんを まとめて 正しく 加算できる。
+  if(streak > S.yenStreakHigh){
+    const newMilestones = Math.floor(streak/7) - Math.floor(S.yenStreakHigh/7);
+    if(newMilestones > 0){
+      S.yen += newMilestones;
+      yenAwarded = true;
+    }
+    S.yenStreakHigh = streak;
   }
   const isNewBest = streak > S.bestStreak;
   if(isNewBest) S.bestStreak = streak;
@@ -861,17 +884,30 @@ function checkBadges(){
   });
   if(changed) save();
 }
+// しょうごう・マスコット成長が同時に起きると、あとから呼んだ方が前のメッセージを
+// 消してしまっていたので、順番に1つずつ表示するキューにする。
 let badgeToastTimer = null;
+let badgeToastQueue = [];
+let badgeToastShowing = false;
 function showBadgeToast(icon, msg){
-  playChime();
+  badgeToastQueue.push({icon, msg});
+  if(!badgeToastShowing) advanceBadgeToastQueue();
+}
+function advanceBadgeToastQueue(){
   const el = document.getElementById('badgeToast');
-  if(!el) return;
-  el.innerHTML = `<span class="face">${icon}</span><span class="bubble">${esc(msg)}</span>`;
+  const next = badgeToastQueue.shift();
+  if(!next || !el){ badgeToastShowing = false; return; }
+  badgeToastShowing = true;
+  playChime();
+  el.innerHTML = `<span class="face">${next.icon}</span><span class="bubble">${esc(next.msg)}</span>`;
   el.classList.remove('on');
   void el.offsetWidth;
   el.classList.add('on');
   clearTimeout(badgeToastTimer);
-  badgeToastTimer = setTimeout(()=> el.classList.remove('on'), 3200);
+  badgeToastTimer = setTimeout(()=>{
+    el.classList.remove('on');
+    setTimeout(advanceBadgeToastQueue, 300); // フェードアウトが終わってから つぎを出す
+  }, 3200);
 }
 function renderBadges(){
   const el = document.getElementById('badgeCard');
@@ -1093,9 +1129,9 @@ function tapGoal(g){
 // 戻り値: celebrateAllDoneIfNeeded() の結果（そのまとめ演出を すでに 出したか）
 function addStamp(dateKey, goal){
   const wasAllDone = allDoneOn(dateKey);
-  (S.stamps[dateKey] = S.stamps[dateKey] || []).push({
-    id: 'st'+Date.now()+Math.random(), goalId: goal.id, icon: goal.icon, name: goal.name, ts: Date.now()
-  });
+  // id/name/ts はどこからも読まれていないので保存しない（容量の節約。localStorageは
+  // 同じドメインの他アプリと共有なので、長く使うほど効いてくる）。goalId/iconだけで十分。
+  (S.stamps[dateKey] = S.stamps[dateKey] || []).push({ goalId: goal.id, icon: goal.icon });
   save();
   checkBadges();
   checkMascotGrowth();
@@ -1114,20 +1150,15 @@ function stamp(g){
   confetti();
   playPop();
   if(awarded) return;
-  const total = totalStamps() - S.spent;
-  const need = S.reward.need;
-  if(S.reward.text && need>0 && total>0 && total % need === 0){
-    playFanfare();
-    showCeleb('🎁', `スタンプ ${need}こ たまった！\n${S.reward.text}`);
+  // 旧・単一ごほうび(S.reward)は もう rewards ショップへ 移行ずみで
+  // ショップ側から しなものを 消しても ここだけ 演出が のこってしまっていたので はいしした。
+  const rare = rollRareSurprise();
+  if(rare){
+    confetti();
+    playSparkle();
+    showCeleb(rare.icon, rare.msg);
   }else{
-    const rare = rollRareSurprise();
-    if(rare){
-      confetti();
-      playSparkle();
-      showCeleb(rare.icon, rare.msg);
-    }else{
-      showCeleb(g.icon, 'スタンプ ゲット！');
-    }
+    showCeleb(g.icon, 'スタンプ ゲット！');
   }
 }
 
@@ -1230,8 +1261,10 @@ function renderCal(){
   }
   document.getElementById('calSum').textContent = `この つきの スタンプ： ${cnt}こ`;
 }
-document.getElementById('prevM').onclick = ()=>{ calM.setMonth(calM.getMonth()-1); renderCal(); };
-document.getElementById('nextM').onclick = ()=>{ calM.setMonth(calM.getMonth()+1); renderCal(); };
+// calM が31日などを持っていると setMonth() で月が二重に進む/戻らないことがあるため、
+// 1日を基準にした新しい Date を作って月だけを ずらす。
+document.getElementById('prevM').onclick = ()=>{ calM = new Date(calM.getFullYear(), calM.getMonth()-1, 1); renderCal(); };
+document.getElementById('nextM').onclick = ()=>{ calM = new Date(calM.getFullYear(), calM.getMonth()+1, 1); renderCal(); };
 
 /* ---- その日の きろく（カレンダーの日付タップ、常にPIN） ---- */
 let dayDetailKey = null;
@@ -1244,7 +1277,6 @@ function openDayDetail(k){
 }
 function renderDayDetail(){
   const k = dayDetailKey;
-  const dt = new Date();
   const [y,m,d] = k.split('-').map(Number);
   document.getElementById('dayModalTitle').textContent =
     `${dateLabel(k)}（${WD[new Date(y,m-1,d).getDay()]}）`;
@@ -1505,7 +1537,6 @@ function openGoalModal(g){
   });
   updateTypeUI();
   function updateTypeUI(){
-    document.getElementById('minWrap').style.display = 'block';
     document.getElementById('gMinLabel').textContent =
       pickType==='race' ? '目標じかん（なんぷん いないに おわらせる？）'
       : 'めやすの じかん（なんぷん）';
@@ -1542,7 +1573,18 @@ document.getElementById('gDelete').onclick = ()=>{
   if(!editing) return;
   if(!confirm(`「${editing.name}」を けしますか？`)) return;
   if(!confirm('ほんとうに けしますか？\n（おしたスタンプは のこります）')) return;
-  S.goals = S.goals.filter(x=>x.id!==editing.id);
+  const gid = editing.id;
+  S.goals = S.goals.filter(x=>x.id!==gid);
+  // 「その日に えらんだ もくひょう」「あした きめる」に けした もくひょうの id が のこると、
+  // その日が いつまでも「ぜんぶ できた」に ならなくなるので、あわせて 取りのぞく。
+  Object.keys(S.dailySelections).forEach(k=>{
+    const arr = S.dailySelections[k].filter(id=>id!==gid);
+    if(arr.length) S.dailySelections[k] = arr; else delete S.dailySelections[k];
+  });
+  Object.keys(S.deferred).forEach(k=>{
+    const arr = S.deferred[k].filter(id=>id!==gid);
+    if(arr.length) S.deferred[k] = arr; else delete S.deferred[k];
+  });
   save();
   document.getElementById('goalModal').classList.remove('on');
   renderToday(); renderAdultGoals();
